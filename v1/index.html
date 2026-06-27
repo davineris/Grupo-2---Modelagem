@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<!--
+  Simulador de Teoria das Filas — Linha de Produtos de Limpeza
+  Grupo 2 — ENGF84 Modelagem e Simulação
+  =============================================================
+  CDN utilizados:
+    - Chart.js 4.4 (https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js)
+
+  Parâmetros baseline extraídos da planilha ENGF84_dados_linha_industrial_tratados.xlsx
+    λ  = 11,32 lotes/h  (6250 lotes / 23 dias / 24 h)
+    t̄_mont = 3,78 min   (média empírica de t_mont)
+    t̄_insp = 2,07 min   (média empírica de t_insp)
+    t̄_emb  = 3,15 min   (média empírica de t_emb)
+    Mix: A=51,2% B=28,9% C=19,8%
+    Espera média na montagem: 8,44 min
+    Tempo médio no sistema: 18,05 min
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Simulador — Linha de Produtos de Limpeza | ENGF84</title>
+<style>
+/* ===================== RESET & BASE ===================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:       #f0f2f5;
+  --surface:  #ffffff;
+  --border:   #e2e6ea;
+  --text:     #1a1a2e;
+  --muted:    #6c757d;
+  --primary:  #2563eb;
+  --primary-l:#dbeafe;
+  --success:  #16a34a;
+  --success-l:#dcfce7;
+  --warning:  #d97706;
+  --warning-l:#fef3c7;
+  --danger:   #dc2626;
+  --danger-l: #fee2e2;
+  --purple:   #7c3aed;
+  --purple-l: #ede9fe;
+  --teal:     #0f766e;
+  --teal-l:   #ccfbf1;
+  --gap:      16px;
+  --radius:   10px;
+  --shadow:   0 1px 4px rgba(0,0,0,.08);
+}
+body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; background: var(--bg); color: var(--text); }
+h1,h2,h3,h4 { font-weight: 600; }
+a { color: var(--primary); }
+button { cursor: pointer; font-family: inherit; }
+input, select { font-family: inherit; font-size: 13px; }
+
+/* ===================== LAYOUT ===================== */
+.container { max-width: 1400px; margin: 0 auto; padding: var(--gap); }
+.section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--gap); margin-bottom: var(--gap); box-shadow: var(--shadow); }
+.section-title { font-size: 15px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.section-title .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
+
+/* ===================== HEADER ===================== */
+.header { background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%); color: #fff; border-radius: var(--radius); padding: 20px 24px; margin-bottom: var(--gap); }
+.header h1 { font-size: 20px; margin-bottom: 4px; }
+.header p  { opacity: .85; font-size: 13px; line-height: 1.6; }
+.header-meta { display: flex; gap: 20px; margin-top: 12px; flex-wrap: wrap; }
+.header-meta span { background: rgba(255,255,255,.15); border-radius: 6px; padding: 4px 10px; font-size: 12px; }
+.header-meta .bottleneck { background: #fef3c7; color: #92400e; font-weight: 700; }
+
+/* ===================== KPI CARDS ===================== */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; position: relative; }
+.kpi-card .kpi-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+.kpi-card .kpi-value { font-size: 24px; font-weight: 700; }
+.kpi-card .kpi-ci   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.kpi-card .kpi-delta { font-size: 12px; font-weight: 600; margin-top: 4px; }
+.kpi-card .kpi-delta.up   { color: var(--success); }
+.kpi-card .kpi-delta.down { color: var(--danger); }
+.kpi-card .kpi-delta.neutral { color: var(--muted); }
+.kpi-card.alert-high { border-left: 4px solid var(--danger); }
+.kpi-card.alert-warn { border-left: 4px solid var(--warning); }
+.kpi-card.accent-blue   { border-top: 3px solid var(--primary); }
+.kpi-card.accent-green  { border-top: 3px solid var(--success); }
+.kpi-card.accent-purple { border-top: 3px solid var(--purple); }
+.kpi-card.accent-teal   { border-top: 3px solid var(--teal); }
+.kpi-card.accent-warn   { border-top: 3px solid var(--warning); }
+.kpi-card.accent-danger { border-top: 3px solid var(--danger); }
+
+/* ===================== FLOW DIAGRAM ===================== */
+.flow-container { display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding-bottom: 8px; }
+.flow-step { display: flex; flex-direction: column; align-items: center; min-width: 140px; }
+.flow-box { width: 130px; border-radius: 8px; padding: 10px; text-align: center; border: 2px solid transparent; position: relative; }
+.flow-box .fb-label { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+.flow-box .fb-stat  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.flow-box .fb-util  { font-size: 13px; font-weight: 600; margin-top: 4px; }
+.flow-box.queue  { background: #fef3c7; border-color: #d97706; }
+.flow-box.station{ background: #ede9fe; border-color: #7c3aed; }
+.flow-box.station.bottleneck { background: #fee2e2; border-color: var(--danger); box-shadow: 0 0 0 3px rgba(220,38,38,.2); }
+.flow-box.arrival{ background: #dcfce7; border-color: var(--success); }
+.flow-box.exit   { background: #dbeafe; border-color: var(--primary); }
+.flow-box.decision{ background: #fce7f3; border-color: #be185d; clip-path: polygon(50% 0%,100% 50%,50% 100%,0% 50%); height: 80px; display:flex; align-items:center; justify-content:center; }
+.flow-badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 99px; position: absolute; top: -8px; right: -8px; }
+.flow-badge.gargalo { background: var(--danger); color: #fff; }
+.flow-arrow { display: flex; align-items: center; padding: 0 4px; padding-top: 30px; }
+.flow-arrow svg { width: 24px; height: 24px; color: var(--muted); }
+.flow-rework { margin-top: 6px; font-size: 10px; color: var(--danger); text-align: center; font-style: italic; }
+
+/* ===================== SIMULATOR ===================== */
+.sim-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+@media(max-width:900px){ .sim-grid { grid-template-columns: 1fr; } }
+.param-group { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+.param-group h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 8px; }
+.param-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.param-row label { font-size: 12px; flex: 1; }
+.param-row input[type=number], .param-row input[type=range], .param-row select { width: 110px; border: 1px solid var(--border); border-radius: 5px; padding: 3px 6px; }
+.param-row input[type=range] { width: 90px; }
+.param-row .val-display { width: 44px; text-align: right; font-size: 12px; font-weight: 600; color: var(--primary); }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.btn { padding: 8px 16px; border-radius: 6px; border: none; font-size: 13px; font-weight: 600; transition: opacity .15s; }
+.btn:hover { opacity: .85; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-success { background: var(--success); color: #fff; }
+.btn-warning { background: var(--warning); color: #fff; }
+.btn-danger  { background: var(--danger);  color: #fff; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.scenario-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.stab { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; font-weight: 600; cursor: pointer; background: var(--surface); transition: all .15s; }
+.stab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.progress-bar { height: 8px; background: #e5e7eb; border-radius: 99px; overflow: hidden; margin-top: 8px; display:none; }
+.progress-fill { height: 100%; background: var(--primary); transition: width .2s; }
+#sim-status { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+/* ===================== COMPARISON TABLE ===================== */
+.comp-table-wrap { overflow-x: auto; }
+.comp-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.comp-table th { background: #f1f5f9; padding: 8px 10px; text-align: center; border: 1px solid var(--border); font-size: 11px; white-space: nowrap; }
+.comp-table td { padding: 7px 10px; border: 1px solid var(--border); text-align: center; }
+.comp-table tr:nth-child(even) td { background: #fafafa; }
+.comp-table .scenario-name { text-align: left; font-weight: 600; white-space: nowrap; }
+.comp-table .best   { background: #dcfce7 !important; font-weight: 700; color: var(--success); }
+.comp-table .worst  { background: #fee2e2 !important; font-weight: 700; color: var(--danger); }
+.comp-table .warn   { background: #fef3c7 !important; }
+.ci-text { font-size: 10px; color: var(--muted); display:block; }
+
+/* ===================== CHARTS ===================== */
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+@media(max-width:900px){ .charts-grid { grid-template-columns: 1fr; } }
+.chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); }
+.chart-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--text); }
+.chart-wrap { position: relative; height: 220px; }
+
+/* ===================== DOCS ===================== */
+.docs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+@media(max-width:800px){ .docs-grid { grid-template-columns: 1fr; } }
+.docs-list { list-style: none; }
+.docs-list li { padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.5; }
+.docs-list li:last-child { border-bottom: none; }
+.docs-list li::before { content: '→ '; color: var(--primary); font-weight: 700; }
+
+/* ===================== ALERTS ===================== */
+.alert { padding: 8px 12px; border-radius: 6px; font-size: 12px; margin-bottom: 8px; display:flex; align-items:center; gap:8px; }
+.alert.info    { background: var(--primary-l); color: #1e40af; }
+.alert.warn    { background: var(--warning-l); color: #92400e; }
+.alert.danger  { background: var(--danger-l);  color: #991b1b; }
+.alert.success { background: var(--success-l); color: #14532d; }
+#alerts-box { margin-bottom: 10px; }
+
+/* ===================== UTIL ===================== */
+.flex { display: flex; }
+.gap-2 { gap: 8px; }
+.text-muted { color: var(--muted); font-size: 12px; }
+.mt-1 { margin-top: 6px; }
+.tag { display:inline-block; padding: 2px 7px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+.tag-danger  { background: var(--danger-l);  color: var(--danger); }
+.tag-success { background: var(--success-l); color: var(--success); }
+.tag-warn    { background: var(--warning-l); color: var(--warning); }
+.tag-blue    { background: var(--primary-l); color: var(--primary); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- ==================== HEADER ==================== -->
+<div class="header">
+  <h1>⚙️ Simulador de Teoria das Filas — Linha de Produtos de Limpeza</h1>
+  <p>ENGF84 Modelagem e Simulação · Grupo 2 · Simulação de Eventos Discretos com múltiplas replicações e IC 95%</p>
+  <div class="header-meta">
+    <span>📦 Famílias: A (51,2%) · B (28,9%) · C (19,8%)</span>
+    <span>🔄 Fluxo: Chegada → Montagem → Inspeção/CQ → Embalagem → Saída</span>
+    <span class="bottleneck">⚠️ Gargalo: Montagem (ρ ≈ 71,3%)</span>
+    <span id="hdr-scenario">📊 Cenário: Baseline</span>
+  </div>
+</div>
+
+<!-- ==================== ALERTS ==================== -->
+<div id="alerts-box"></div>
+
+<!-- ==================== KPI CARDS ==================== -->
+<div class="section">
+  <div class="section-title">
+    📊 KPIs Principais
+    <span class="badge" style="background:var(--primary-l);color:var(--primary)">IC 95%</span>
+    <span class="text-muted" style="margin-left:auto;font-size:12px" id="kpi-scenario-label">Baseline · 30 replicações</span>
+  </div>
+  <div class="kpi-grid" id="kpi-grid">
+    <!-- Populated by JS -->
+  </div>
+</div>
+
+<!-- ==================== FLOW DIAGRAM ==================== -->
+<div class="section">
+  <div class="section-title">🏭 Fluxo da Linha de Produção</div>
+  <div class="flow-container" id="flow-diagram"></div>
+  <div class="flow-rework">↑ Lotes reprovados na inspeção retornam à fila de montagem (retrabalho)</div>
+</div>
+
+<!-- ==================== SIMULATOR ==================== -->
+<div class="section">
+  <div class="section-title">🎛️ Simulador de Cenários</div>
+
+  <!-- Scenario Tabs -->
+  <div class="scenario-tabs">
+    <div class="stab active" data-s="0" onclick="loadScenario(0)">0 — Baseline</div>
+    <div class="stab" data-s="1" onclick="loadScenario(1)">1 — +Capacidade Montagem</div>
+    <div class="stab" data-s="2" onclick="loadScenario(2)">2 — Redução Setup</div>
+    <div class="stab" data-s="3" onclick="loadScenario(3)">3 — Menos Retrabalho</div>
+    <div class="stab" data-s="4" onclick="loadScenario(4)">4 — Quebra no Gargalo</div>
+    <div class="stab" data-s="5" onclick="loadScenario(5)">5 — Personalizado</div>
+  </div>
+
+  <div class="sim-grid">
+    <!-- Left: Parameters -->
+    <div>
+      <div class="param-group">
+        <h4>Chegadas e Mix</h4>
+        <div class="param-row">
+          <label>Taxa de chegada λ (lotes/h)</label>
+          <input type="number" id="p-lambda" value="11.32" min="1" max="30" step="0.1"/>
+        </div>
+        <div class="param-row">
+          <label>Mix A (%)</label>
+          <input type="range" id="p-mixA" min="0" max="100" value="51" oninput="syncMix('A')"/>
+          <span class="val-display" id="v-mixA">51%</span>
+        </div>
+        <div class="param-row">
+          <label>Mix B (%)</label>
+          <input type="range" id="p-mixB" min="0" max="100" value="29" oninput="syncMix('B')"/>
+          <span class="val-display" id="v-mixB">29%</span>
+        </div>
+        <div class="param-row">
+          <label>Mix C (%)</label>
+          <input type="range" id="p-mixC" min="0" max="100" value="20" oninput="syncMix('C')"/>
+          <span class="val-display" id="v-mixC">20%</span>
+        </div>
+      </div>
+
+      <div class="param-group">
+        <h4>Capacidade e Servidores</h4>
+        <div class="param-row">
+          <label>Servidores — Montagem</label>
+          <input type="number" id="p-s-mont" value="1" min="1" max="5" step="1"/>
+        </div>
+        <div class="param-row">
+          <label>Servidores — Inspeção</label>
+          <input type="number" id="p-s-insp" value="1" min="1" max="5" step="1"/>
+        </div>
+        <div class="param-row">
+          <label>Servidores — Embalagem</label>
+          <input type="number" id="p-s-emb" value="1" min="1" max="5" step="1"/>
+        </div>
+      </div>
+
+      <div class="param-group">
+        <h4>Tempos de Serviço (min)</h4>
+        <div class="param-row">
+          <label>Tempo médio montagem</label>
+          <input type="number" id="p-t-mont" value="3.78" min="0.5" max="20" step="0.01"/>
+        </div>
+        <div class="param-row">
+          <label>Tempo médio inspeção</label>
+          <input type="number" id="p-t-insp" value="2.07" min="0.5" max="15" step="0.01"/>
+        </div>
+        <div class="param-row">
+          <label>Tempo médio embalagem</label>
+          <input type="number" id="p-t-emb" value="3.15" min="0.5" max="20" step="0.01"/>
+        </div>
+        <div class="param-row">
+          <label>Setup entre famílias (min)</label>
+          <input type="number" id="p-setup" value="0" min="0" max="60" step="0.5"/>
+        </div>
+        <div class="param-row">
+          <label>Taxa de reprovação (%)</label>
+          <input type="range" id="p-reprova" min="0" max="60" value="3" oninput="document.getElementById('v-reprova').textContent=this.value+'%'"/>
+          <span class="val-display" id="v-reprova">3%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Simulation Config -->
+    <div>
+      <div class="param-group">
+        <h4>Configuração da Simulação</h4>
+        <div class="param-row">
+          <label>Duração simulada (horas)</label>
+          <input type="number" id="p-dur" value="24" min="1" max="168" step="1"/>
+        </div>
+        <div class="param-row">
+          <label>Número de replicações</label>
+          <input type="number" id="p-reps" value="30" min="5" max="200" step="1"/>
+        </div>
+        <div class="param-row">
+          <label>Semente aleatória (0=aleatório)</label>
+          <input type="number" id="p-seed" value="42" min="0" max="999999" step="1"/>
+        </div>
+        <div class="param-row">
+          <label>Warm-up (horas ignoradas)</label>
+          <input type="number" id="p-warmup" value="2" min="0" max="12" step="0.5"/>
+        </div>
+      </div>
+
+      <div class="param-group">
+        <h4>Curveball — Quebra no Gargalo</h4>
+        <div class="param-row">
+          <label>Ativar quebra</label>
+          <select id="p-break-on">
+            <option value="0">Não</option>
+            <option value="1">Sim</option>
+          </select>
+        </div>
+        <div class="param-row">
+          <label>Horário da quebra (h)</label>
+          <input type="number" id="p-break-t" value="10" min="0" max="23" step="0.5"/>
+        </div>
+        <div class="param-row">
+          <label>Duração da quebra (h)</label>
+          <input type="number" id="p-break-d" value="2" min="0.1" max="12" step="0.1"/>
+        </div>
+      </div>
+
+      <div class="param-group">
+        <h4>Restrições</h4>
+        <div class="param-row">
+          <label>Utilização máxima aceitável (%)</label>
+          <input type="number" id="p-util-max" value="85" min="50" max="100" step="1"/>
+        </div>
+        <div class="param-row">
+          <label>Custo/h montagem (R$)</label>
+          <input type="number" id="p-cost-mont" value="120" min="0" max="9999" step="10"/>
+        </div>
+        <div class="param-row">
+          <label>Custo/h inspeção (R$)</label>
+          <input type="number" id="p-cost-insp" value="80" min="0" max="9999" step="10"/>
+        </div>
+        <div class="param-row">
+          <label>Custo/h embalagem (R$)</label>
+          <input type="number" id="p-cost-emb" value="90" min="0" max="9999" step="10"/>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="runSimulation()">▶ Rodar Simulação</button>
+        <button class="btn btn-success" onclick="compareAll()">⚖️ Comparar Todos</button>
+        <button class="btn btn-outline" onclick="loadScenario(0)">↺ Resetar Baseline</button>
+        <button class="btn btn-outline" onclick="exportCSV()">⬇ Exportar CSV</button>
+        <button class="btn btn-outline" onclick="copyExecutiveSummary()">📋 Resumo Executivo</button>
+      </div>
+      <div class="progress-bar" id="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      <div id="sim-status"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== COMPARISON TABLE ==================== -->
+<div class="section">
+  <div class="section-title">📋 Comparação de Cenários</div>
+  <div class="comp-table-wrap">
+    <table class="comp-table" id="comp-table">
+      <thead>
+        <tr>
+          <th>Cenário</th>
+          <th>Throughput<br/>(lotes/dia)</th>
+          <th>WIP Médio<br/>(lotes)</th>
+          <th>Lead Time<br/>(min)</th>
+          <th>Fila Mont.<br/>(min)</th>
+          <th>Util. Mont.<br/>(%)</th>
+          <th>Util. Insp.<br/>(%)</th>
+          <th>Util. Emb.<br/>(%)</th>
+          <th>Retrabalho<br/>(%)</th>
+          <th>Custo<br/>(R$/dia)</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="comp-tbody">
+        <tr><td colspan="11" style="color:var(--muted);text-align:center;padding:20px">Clique em "Comparar Todos" para executar todos os cenários</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ==================== CHARTS ==================== -->
+<div class="section">
+  <div class="section-title">📈 Gráficos Temporais</div>
+  <div class="charts-grid">
+    <div class="chart-card">
+      <h4>Gráfico 1 — Fila ao Longo do Dia (lotes)</h4>
+      <div class="chart-wrap"><canvas id="chart-queue"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h4>Gráfico 2 — Utilização por Etapa (%)</h4>
+      <div class="chart-wrap"><canvas id="chart-util"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h4>Gráfico 3 — Throughput Acumulado</h4>
+      <div class="chart-wrap"><canvas id="chart-throughput"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h4>Gráfico 4 — Comparação de Cenários (média ± IC95)</h4>
+      <div class="chart-wrap"><canvas id="chart-compare"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== DOCS ==================== -->
+<div class="section">
+  <div class="section-title">📖 Documentação do Modelo</div>
+  <div class="docs-grid">
+    <div>
+      <h4 style="margin-bottom:8px">Premissas do Modelo</h4>
+      <ul class="docs-list">
+        <li>O modelo é uma aproximação de linha de produção real com dados empíricos de 23 dias normais</li>
+        <li>Disciplina de fila FIFO em todas as etapas (exceto retrabalho prioritário — configurável)</li>
+        <li>Retrabalho retorna ao final da fila de montagem após reprovação na inspeção</li>
+        <li>Qualidade modelada como probabilidade de reprovação (Bernoulli) na inspeção</li>
+        <li>Setup modelado como tempo adicional na troca de família (A→B→C→A)</li>
+        <li>WIP validado pela Lei de Little: <strong>L = λ · W</strong> (L=WIP, λ=chegadas efetivas, W=tempo médio no sistema)</li>
+        <li>Resultados interpretados por média e IC95 — não por replicação única</li>
+        <li>Tempos de serviço e entre-chegadas seguem distribuição Exponencial (memoryless)</li>
+        <li>Manutenção preventiva e abastecimento fora do escopo (exceto cenário de quebra)</li>
+      </ul>
+    </div>
+    <div>
+      <h4 style="margin-bottom:8px">Como Interpretar os Resultados</h4>
+      <ul class="docs-list">
+        <li><strong>Throughput maior</strong> é melhor — mais lotes aprovados por dia</li>
+        <li><strong>WIP menor</strong> indica menos acúmulo — sistema mais fluído (Lei de Little)</li>
+        <li><strong>Lead time menor</strong> indica fluxo mais rápido do lote no sistema</li>
+        <li><strong>Utilização alta</strong> (&gt;85%) no gargalo é sinalizada como risco de instabilidade</li>
+        <li><strong>ICs sobrepostos</strong> entre cenários indicam que a diferença pode não ser significativa</li>
+        <li><strong>Fila da montagem</strong> é o indicador mais sensível ao gargalo</li>
+        <li><strong>Retrabalho</strong> aumenta carga efetiva na montagem, piorando o gargalo</li>
+        <li>Rodar ≥ 30 replicações reduz erro padrão e estreita o IC95</li>
+        <li>Warm-up de 2h descarta o período transitório inicial para obter estado estacionário</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+/* =====================================================================
+   SIMULADOR DE EVENTOS DISCRETOS — Linha de Produtos de Limpeza
+   ENGF84 · Grupo 2
+   =====================================================================
+
+   Lei de Little usada para validação:
+     L = λ · W
+     L  = WIP médio (lotes no sistema)
+     λ  = taxa efetiva de saída (throughput/hora)
+     W  = tempo médio no sistema (lead time em horas)
+
+   Utilização:
+     ρ_i = (λ_efetiva · t̄_i) / s_i
+     onde s_i = número de servidores na etapa i
+
+   Throughput calculado contando saídas do sistema (embalagem concluída)
+   no período após warm-up.
+
+   IC95 = x̄ ± 1.96 · s / √n  (aproximação pela normal, n≥30)
+   ===================================================================== */
+
+// ===================== PARÂMETROS BASELINE =====================
+const BASELINE = {
+  lambda:   11.32,   // lotes/h (empírico: 6250 lotes / 23 dias / 24h)
+  sMont:    1,       // servidores montagem
+  sInsp:    1,       // servidores inspeção
+  sEmb:     1,       // servidores embalagem
+  tMont:    3.78,    // min (média empírica)
+  tInsp:    2.07,    // min (média empírica)
+  tEmb:     3.15,    // min (média empírica)
+  setup:    0,       // min setup entre famílias (dados empíricos mostram ρ≈71% sem overhead de setup)
+  reprova:  3,       // % de reprovação — calibrado para ρ_mont≈73% próximo ao empírico 71,3%
+  mixA:     51, mixB: 29, mixC: 20,
+  dur:      24,      // horas simuladas
+  reps:     30,
+  seed:     42,
+  warmup:   2,       // horas de warm-up descartadas
+  breakOn:  0, breakT: 10, breakD: 2,
+  utilMax:  85,
+  costMont: 120, costInsp: 80, costEmb: 90,
+};
+
+// Cenários pré-definidos (deltas sobre baseline)
+const SCENARIOS = {
+  0: { ...BASELINE, _name: 'Baseline' },
+  1: { ...BASELINE, sMont: 2, _name: '+Capacidade Montagem' },
+  2: { ...BASELINE, setup: 0, reprova: 15, _name: 'Redução Setup' },
+  3: { ...BASELINE, reprova: 1, setup: 5, _name: 'Menos Retrabalho' },
+  4: { ...BASELINE, breakOn: 1, breakT: 10, breakD: 2, _name: 'Quebra no Gargalo' },
+  5: { ...BASELINE, _name: 'Personalizado' },
+};
+
+let currentScenario = 0;
+let lastResults = {}; // cache de resultados por cenário
+let baselineResults = null;
+
+// ===================== GERADOR ALEATÓRIO (LCG) =====================
+// Seeded LCG para reprodutibilidade
+function makePRNG(seed) {
+  let s = (seed || Math.floor(Math.random() * 999999)) >>> 0;
+  if (s === 0) s = 1;
+  return function() {
+    s = (1664525 * s + 1013904223) & 0xFFFFFFFF;
+    return (s >>> 0) / 0x100000000;
+  };
+}
+
+// Exponencial com média `mean` (minutos)
+function expRandom(rng, mean) {
+  const u = Math.max(rng(), 1e-12);
+  return -mean * Math.log(u);
+}
+
+// ===================== SIMULAÇÃO DE UMA REPLICAÇÃO =====================
+/*
+  Abordagem: simulação de eventos discretos com fila de eventos ordenada.
+  Entidade: lote com atributos {id, type, arrivalTime, rework, ...}
+  Eventos: ARRIVE, START_MONT, END_MONT, START_INSP, END_INSP, START_EMB, END_EMB, BREAKDOWN_START, BREAKDOWN_END
+*/
+function simulateOne(p, seed) {
+  const rng = makePRNG(seed);
+  const DUR = p.dur * 60;      // minutos
+  const WARMUP = p.warmup * 60;
+  const breakStart = p.breakOn ? p.breakT * 60 : Infinity;
+  const breakEnd   = p.breakOn ? (p.breakT + p.breakD) * 60 : Infinity;
+
+  // Filas e servidores
+  let qMont = [], qInsp = [], qEmb = [];
+  let busyMont = 0, busyInsp = 0, busyEmb = 0;
+  let serversMont = p.sMont, serversInsp = p.sInsp, serversEmb = p.sEmb;
+
+  // Contadores de tempo ocupado (para utilização)
+  let busyTimeMont = 0, busyTimeInsp = 0, busyTimeEmb = 0;
+
+  // WIP: integral no tempo de (lotes no sistema)
+  let wipCount = 0; let wipIntegral = 0; let lastWipT = 0;
+
+  // Coleta horária (após warm-up)
+  const H = Math.ceil(p.dur);
+  const hourlyQMont = new Array(H).fill(0);
+  const hourlyQInsp = new Array(H).fill(0);
+  const hourlyQEmb  = new Array(H).fill(0);
+  const hourlyUMont = new Array(H).fill(0);
+  const hourlyUInsp = new Array(H).fill(0);
+  const hourlyUEmb  = new Array(H).fill(0);
+  const hourlyApproved = new Array(H).fill(0);
+  const hourlyRework   = new Array(H).fill(0);
+  const hourlyHits     = new Array(H).fill(0); // amostras por hora
+
+  let approved = 0, reworkCount = 0, totalArrivals = 0;
+  let sumLeadTime = 0, countLeadTime = 0;
+  let sumWaitMont = 0, countWaitMont = 0;
+
+  // Tipos de eventos
+  const EV = { ARRIVE:1, END_MONT:2, END_INSP:3, END_EMB:4, BREAK_START:5, BREAK_END:6, SAMPLE:7 };
+  let events = [];
+  let lotId = 0;
+  let brokenDown = false;
+
+  function pushEvent(t, type, data) {
+    events.push({ t, type, data });
+    events.sort((a,b) => a.t - b.t);
+  }
+
+  function wipUpdate(t) {
+    wipIntegral += wipCount * (t - lastWipT);
+    lastWipT = t;
+  }
+
+  function getHour(t) { return Math.min(Math.floor(t / 60), H-1); }
+
+  // Tipo de produto por mix
+  function pickType() {
+    const r = rng() * 100;
+    if (r < p.mixA) return 'A';
+    if (r < p.mixA + p.mixB) return 'B';
+    return 'C';
+  }
+
+  // Schedula próxima chegada
+  let lastType = null;
+  function scheduleArrival(afterT) {
+    const iat = expRandom(rng, 60 / p.lambda);
+    const t = afterT + iat;
+    if (t < DUR) pushEvent(t, EV.ARRIVE, { lotId: ++lotId, type: pickType(), arrivedAt: t, isRework: false });
+  }
+
+  // Inicia serviço na montagem se houver lote na fila e servidor livre
+  function tryStartMont(now) {
+    while (busyMont < serversMont && qMont.length > 0 && !brokenDown) {
+      const lot = qMont.shift();
+      busyMont++;
+      const setup = (lastType && lastType !== lot.type) ? p.setup : 0;
+      lastType = lot.type;
+      lot.waitMont = now - lot.joinedMontQueue;
+      if (now >= WARMUP) { sumWaitMont += lot.waitMont; countWaitMont++; }
+      const svcTime = expRandom(rng, p.tMont) + setup;
+      const endT = now + svcTime;
+      if (endT <= DUR) pushEvent(endT, EV.END_MONT, { lot, svcTime });
+      else busyMont--;
+    }
+  }
+  function tryStartInsp(now) {
+    while (busyInsp < serversInsp && qInsp.length > 0) {
+      const lot = qInsp.shift();
+      busyInsp++;
+      const svcTime = expRandom(rng, p.tInsp);
+      const endT = now + svcTime;
+      if (endT <= DUR) pushEvent(endT, EV.END_INSP, { lot, svcTime });
+      else busyInsp--;
+    }
+  }
+  function tryStartEmb(now) {
+    while (busyEmb < serversEmb && qEmb.length > 0) {
+      const lot = qEmb.shift();
+      busyEmb++;
+      const svcTime = expRandom(rng, p.tEmb);
+      const endT = now + svcTime;
+      if (endT <= DUR) pushEvent(endT, EV.END_EMB, { lot, svcTime });
+      else busyEmb--;
+    }
+  }
+
+  // Amostra horária
+  function sampleHour(t) {
+    const h = getHour(t);
+    if (t >= WARMUP) {
+      hourlyQMont[h] += qMont.length;
+      hourlyQInsp[h] += qInsp.length;
+      hourlyQEmb[h]  += qEmb.length;
+      hourlyUMont[h] += busyMont / serversMont * 100;
+      hourlyUInsp[h] += busyInsp / serversInsp * 100;
+      hourlyUEmb[h]  += busyEmb / serversEmb * 100;
+      hourlyHits[h]++;
+    }
+  }
+
+  // Agenda amostras a cada 30 min
+  for (let t = 30; t < DUR; t += 30) pushEvent(t, EV.SAMPLE, {});
+
+  // Quebra
+  if (p.breakOn) {
+    pushEvent(breakStart, EV.BREAK_START, {});
+    pushEvent(breakEnd,   EV.BREAK_END, {});
+  }
+
+  // Primeira chegada
+  scheduleArrival(0);
+
+  // Loop principal
+  let prevMontBusy = { t: 0, busy: 0 };
+  let prevInspBusy = { t: 0, busy: 0 };
+  let prevEmbBusy  = { t: 0, busy: 0 };
+
+  while (events.length > 0) {
+    const ev = events.shift();
+    const now = ev.t;
+
+    // Acumula tempo ocupado pelo estado QUE ESTAVA ATIVO no intervalo [prevT, now]
+    busyTimeMont += prevMontBusy.busy * (now - prevMontBusy.t);
+    busyTimeInsp += prevInspBusy.busy * (now - prevInspBusy.t);
+    busyTimeEmb  += prevEmbBusy.busy  * (now - prevEmbBusy.t);
+
+    switch(ev.type) {
+      case EV.ARRIVE: {
+        const lot = ev.data;
+        totalArrivals++;
+        wipUpdate(now); wipCount++;
+        lot.systemEntry = now;
+        lot.joinedMontQueue = now;
+        qMont.push(lot);
+        tryStartMont(now);
+        scheduleArrival(now);
+        break;
+      }
+      case EV.END_MONT: {
+        busyMont--;
+        wipUpdate(now);
+        const lot = ev.data.lot;
+        lot.joinedInspQueue = now;
+        qInsp.push(lot);
+        tryStartMont(now);
+        tryStartInsp(now);
+        break;
+      }
+      case EV.END_INSP: {
+        busyInsp--;
+        wipUpdate(now);
+        const lot = ev.data.lot;
+        const fails = rng() * 100 < p.reprova;
+        if (fails) {
+          // Retrabalho: volta para montagem
+          if (now >= WARMUP) reworkCount++;
+          lot.isRework = true;
+          lot.joinedMontQueue = now;
+          qMont.push(lot);
+          tryStartMont(now);
+          if (now >= WARMUP) hourlyRework[getHour(now)]++;
+        } else {
+          lot.joinedEmbQueue = now;
+          qEmb.push(lot);
+          tryStartEmb(now);
+        }
+        tryStartInsp(now);
+        break;
+      }
+      case EV.END_EMB: {
+        busyEmb--;
+        wipUpdate(now); wipCount--;
+        const lot = ev.data.lot;
+        if (now >= WARMUP) {
+          approved++;
+          sumLeadTime += now - lot.systemEntry;
+          countLeadTime++;
+          hourlyApproved[getHour(now)]++;
+        }
+        tryStartEmb(now);
+        break;
+      }
+      case EV.BREAK_START: {
+        brokenDown = true;
+        break;
+      }
+      case EV.BREAK_END: {
+        brokenDown = false;
+        tryStartMont(now);
+        break;
+      }
+      case EV.SAMPLE: {
+        sampleHour(now);
+        break;
+      }
+    }
+
+    // Snapshot do estado PÓS-evento (correto para o próximo intervalo)
+    prevMontBusy = { t: now, busy: busyMont };
+    prevInspBusy = { t: now, busy: busyInsp };
+    prevEmbBusy  = { t: now, busy: busyEmb };
+  }
+
+  // Finaliza contadores de tempo
+  busyTimeMont += prevMontBusy.busy * (DUR - prevMontBusy.t);
+  busyTimeInsp += prevInspBusy.busy * (DUR - prevInspBusy.t);
+  busyTimeEmb  += prevEmbBusy.busy  * (DUR - prevEmbBusy.t);
+  wipUpdate(DUR);
+
+  // Utilização = tempo_ocupado / (servidores × duração_total)
+  // busyTime acumula sobre toda a simulação (incluindo warm-up), por isso divide por DUR
+  const utilMont = (busyTimeMont / (serversMont * DUR)) * 100;
+  const utilInsp = (busyTimeInsp / (serversInsp * DUR)) * 100;
+  const utilEmb  = (busyTimeEmb  / (serversEmb  * DUR)) * 100;
+  const wipMean  = wipIntegral / DUR;
+  const leadTime = countLeadTime > 0 ? sumLeadTime / countLeadTime : 0;
+  const throughput = approved; // lotes aprovados após warm-up
+  const reworkRate = totalArrivals > 0 ? (reworkCount / (approved + reworkCount) * 100) : 0;
+  const waitMont  = countWaitMont > 0 ? sumWaitMont / countWaitMont : 0;
+
+  // Custo operacional (R$/dia)
+  const costDay = (p.costMont * p.sMont + p.costInsp * p.sInsp + p.costEmb * p.sEmb) * p.dur;
+
+  // Normaliza amostras horárias
+  for (let h = 0; h < H; h++) {
+    const hits = hourlyHits[h] || 1;
+    hourlyQMont[h] /= hits;
+    hourlyQInsp[h] /= hits;
+    hourlyQEmb[h]  /= hits;
+    hourlyUMont[h] /= hits;
+    hourlyUInsp[h] /= hits;
+    hourlyUEmb[h]  /= hits;
+  }
+
+  return {
+    throughput, wipMean, leadTime, waitMont,
+    utilMont, utilInsp, utilEmb,
+    reworkRate, costDay,
+    hourlyQMont, hourlyQInsp, hourlyQEmb,
+    hourlyUMont, hourlyUInsp, hourlyUEmb,
+    hourlyApproved, hourlyRework, H,
+    approvedRate: 100 - reworkRate,
+  };
+}
+
+// ===================== MÚLTIPLAS REPLICAÇÕES =====================
+// Executa `n` replicações e retorna estatísticas agregadas
+function runReplications(p) {
+  const n = p.reps;
+  const keys = ['throughput','wipMean','leadTime','waitMont','utilMont','utilInsp','utilEmb','reworkRate','costDay'];
+  const hourlyKeys = ['hourlyQMont','hourlyQInsp','hourlyQEmb','hourlyUMont','hourlyUInsp','hourlyUEmb','hourlyApproved','hourlyRework'];
+
+  const allVals = {};
+  keys.forEach(k => allVals[k] = []);
+  const allHourly = {};
+  hourlyKeys.forEach(k => allHourly[k] = null);
+
+  for (let i = 0; i < n; i++) {
+    const seed = p.seed === 0 ? 0 : p.seed * 1000 + i;
+    const r = simulateOne(p, seed);
+    keys.forEach(k => allVals[k].push(r[k]));
+    hourlyKeys.forEach(k => {
+      if (!allHourly[k]) allHourly[k] = r[k].map(v => [v]);
+      else r[k].forEach((v, h) => { if (allHourly[k][h]) allHourly[k][h].push(v); });
+    });
+  }
+
+  // Calcula estatísticas
+  // IC95 = x̄ ± 1.96 · s / √n
+  function stats(arr) {
+    const m = arr.reduce((a,b) => a+b, 0) / arr.length;
+    const s = Math.sqrt(arr.reduce((a,b) => a + (b-m)**2, 0) / (arr.length-1));
+    const me = 1.96 * s / Math.sqrt(arr.length);
+    return { mean: m, sd: s, se: s/Math.sqrt(arr.length), ci95: me, lo: m-me, hi: m+me };
+  }
+
+  const result = { n, params: p };
+  keys.forEach(k => result[k] = stats(allVals[k]));
+
+  // Média horária
+  result.hourly = {};
+  hourlyKeys.forEach(k => {
+    result.hourly[k] = allHourly[k].map(arr => arr.reduce((a,b)=>a+b,0)/arr.length);
+  });
+  result.H = allHourly['hourlyQMont'].length;
+
+  return result;
+}
+
+// ===================== LER PARÂMETROS DO FORMULÁRIO =====================
+function readParams() {
+  return {
+    lambda:   parseFloat(document.getElementById('p-lambda').value),
+    sMont:    parseInt(document.getElementById('p-s-mont').value),
+    sInsp:    parseInt(document.getElementById('p-s-insp').value),
+    sEmb:     parseInt(document.getElementById('p-s-emb').value),
+    tMont:    parseFloat(document.getElementById('p-t-mont').value),
+    tInsp:    parseFloat(document.getElementById('p-t-insp').value),
+    tEmb:     parseFloat(document.getElementById('p-t-emb').value),
+    setup:    parseFloat(document.getElementById('p-setup').value),
+    reprova:  parseInt(document.getElementById('p-reprova').value),
+    mixA:     parseInt(document.getElementById('p-mixA').value),
+    mixB:     parseInt(document.getElementById('p-mixB').value),
+    mixC:     parseInt(document.getElementById('p-mixC').value),
+    dur:      parseFloat(document.getElementById('p-dur').value),
+    reps:     parseInt(document.getElementById('p-reps').value),
+    seed:     parseInt(document.getElementById('p-seed').value),
+    warmup:   parseFloat(document.getElementById('p-warmup').value),
+    breakOn:  parseInt(document.getElementById('p-break-on').value),
+    breakT:   parseFloat(document.getElementById('p-break-t').value),
+    breakD:   parseFloat(document.getElementById('p-break-d').value),
+    utilMax:  parseInt(document.getElementById('p-util-max').value),
+    costMont: parseFloat(document.getElementById('p-cost-mont').value),
+    costInsp: parseFloat(document.getElementById('p-cost-insp').value),
+    costEmb:  parseFloat(document.getElementById('p-cost-emb').value),
+    _name:    SCENARIOS[currentScenario]?._name || 'Personalizado',
+  };
+}
+
+// ===================== CARREGAR CENÁRIO =====================
+function loadScenario(idx) {
+  currentScenario = idx;
+  document.querySelectorAll('.stab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.stab[data-s="${idx}"]`)?.classList.add('active');
+  const s = SCENARIOS[idx];
+  if (!s) return;
+  document.getElementById('p-lambda').value = s.lambda;
+  document.getElementById('p-s-mont').value = s.sMont;
+  document.getElementById('p-s-insp').value = s.sInsp;
+  document.getElementById('p-s-emb').value  = s.sEmb;
+  document.getElementById('p-t-mont').value = s.tMont;
+  document.getElementById('p-t-insp').value = s.tInsp;
+  document.getElementById('p-t-emb').value  = s.tEmb;
+  document.getElementById('p-setup').value  = s.setup;
+  document.getElementById('p-reprova').value = s.reprova;
+  document.getElementById('v-reprova').textContent = s.reprova + '%';
+  document.getElementById('p-mixA').value = s.mixA;
+  document.getElementById('v-mixA').textContent = s.mixA + '%';
+  document.getElementById('p-mixB').value = s.mixB;
+  document.getElementById('v-mixB').textContent = s.mixB + '%';
+  document.getElementById('p-mixC').value = s.mixC;
+  document.getElementById('v-mixC').textContent = s.mixC + '%';
+  document.getElementById('p-dur').value     = s.dur;
+  document.getElementById('p-reps').value    = s.reps;
+  document.getElementById('p-seed').value    = s.seed;
+  document.getElementById('p-warmup').value  = s.warmup;
+  document.getElementById('p-break-on').value = s.breakOn;
+  document.getElementById('p-break-t').value  = s.breakT;
+  document.getElementById('p-break-d').value  = s.breakD;
+  document.getElementById('p-util-max').value = s.utilMax;
+  document.getElementById('p-cost-mont').value = s.costMont;
+  document.getElementById('p-cost-insp').value = s.costInsp;
+  document.getElementById('p-cost-emb').value  = s.costEmb;
+  document.getElementById('hdr-scenario').textContent = '📊 Cenário: ' + s._name;
+}
+
+// Sincroniza sliders de mix
+function syncMix(changed) {
+  let a = parseInt(document.getElementById('p-mixA').value);
+  let b = parseInt(document.getElementById('p-mixB').value);
+  let c = parseInt(document.getElementById('p-mixC').value);
+  const total = a + b + c;
+  if (total !== 100) {
+    if (changed === 'A') { const rem = 100 - a; b = Math.round(rem * b / (b+c||1)); c = 100 - a - b; }
+    else if (changed === 'B') { const rem = 100 - b; a = Math.round(rem * a / (a+c||1)); c = 100 - a - b; }
+    else { const rem = 100 - c; a = Math.round(rem * a / (a+b||1)); b = 100 - a - c; }
+    document.getElementById('p-mixA').value = a;
+    document.getElementById('p-mixB').value = b;
+    document.getElementById('p-mixC').value = c;
+  }
+  document.getElementById('v-mixA').textContent = a + '%';
+  document.getElementById('v-mixB').textContent = b + '%';
+  document.getElementById('v-mixC').textContent = c + '%';
+}
+
+// ===================== RODAR SIMULAÇÃO =====================
+async function runSimulation() {
+  const p = readParams();
+  setStatus('⏳ Simulando ' + p.reps + ' replicações…', true);
+  await sleep(10);
+  const res = runReplications(p);
+  setStatus('');
+  lastResults[currentScenario] = res;
+  if (currentScenario === 0) baselineResults = res;
+  updateKPICards(res);
+  updateFlowDiagram(res, p);
+  updateCharts(res, p);
+  checkAlerts(res, p);
+  document.getElementById('kpi-scenario-label').textContent =
+    p._name + ' · ' + p.reps + ' replicações';
+}
+
+// ===================== COMPARAR TODOS =====================
+async function compareAll() {
+  setStatus('⏳ Executando todos os cenários…', true);
+  for (let i = 0; i < 5; i++) {
+    await sleep(5);
+    const p = { ...SCENARIOS[i] };
+    const res = runReplications(p);
+    lastResults[i] = res;
+    if (i === 0) baselineResults = res;
+    setProgress((i+1)/5*100);
+  }
+  setStatus('');
+  buildComparisonTable();
+  updateCompareChart();
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function setStatus(msg, loading=false) {
+  document.getElementById('sim-status').textContent = msg;
+  const pb = document.getElementById('progress-bar');
+  pb.style.display = loading ? 'block' : 'none';
+  if (!loading) document.getElementById('progress-fill').style.width = '0%';
+}
+function setProgress(pct) {
+  document.getElementById('progress-fill').style.width = pct + '%';
+}
+
+// ===================== CÁLCULO DE IC95 =====================
+// IC95 = x̄ ± 1.96 · s / √n
+function fmtCI(stat, decimals=1) {
+  const m = stat.mean.toFixed(decimals);
+  const lo = stat.lo.toFixed(decimals);
+  const hi = stat.hi.toFixed(decimals);
+  return `${m} [${lo}; ${hi}]`;
+}
+
+// ===================== ATUALIZAR KPI CARDS =====================
+function updateKPICards(res) {
+  const base = baselineResults;
+  function delta(key) {
+    if (!base || !base[key]) return '';
+    const d = ((res[key].mean - base[key].mean) / Math.abs(base[key].mean) * 100);
+    const sign = d >= 0 ? '+' : '';
+    return sign + d.toFixed(1) + '%';
+  }
+  function deltaDir(key, higherIsBetter=true) {
+    if (!base || !base[key]) return 'neutral';
+    const d = res[key].mean - base[key].mean;
+    if (Math.abs(d) < 1e-6) return 'neutral';
+    return (higherIsBetter ? d > 0 : d < 0) ? 'up' : 'down';
+  }
+
+  const p = res.params;
+  const kpis = [
+    { label:'Throughput (lotes/dia)', key:'throughput', decimals:1, unit:'lotes', accent:'accent-green', higher:true },
+    { label:'WIP Médio (lotes)',       key:'wipMean',    decimals:2, unit:'lotes', accent:'accent-blue',  higher:false },
+    { label:'Lead Time (min)',          key:'leadTime',   decimals:1, unit:'min',   accent:'accent-purple',higher:false },
+    { label:'Espera Montagem (min)',    key:'waitMont',   decimals:1, unit:'min',   accent:'accent-warn',  higher:false },
+    { label:'Util. Montagem (%)',       key:'utilMont',   decimals:1, unit:'%',     accent:'accent-danger',higher:false,
+      alert: res.utilMont.mean > p.utilMax ? 'alert-high' : res.utilMont.mean > 75 ? 'alert-warn' : '' },
+    { label:'Util. Inspeção (%)',       key:'utilInsp',   decimals:1, unit:'%',     accent:'accent-blue',  higher:false },
+    { label:'Util. Embalagem (%)',      key:'utilEmb',    decimals:1, unit:'%',     accent:'accent-teal',  higher:false },
+    { label:'Taxa Retrabalho (%)',      key:'reworkRate', decimals:1, unit:'%',     accent:'accent-danger',higher:false },
+    { label:'Taxa Aprovação (%)',       key:'approvedRate',decimals:1,unit:'%',     accent:'accent-green', higher:true,
+      manual: { mean: 100 - res.reworkRate.mean, lo: 100 - res.reworkRate.hi, hi: 100 - res.reworkRate.lo } },
+    { label:'Custo Operacional (R$/dia)',key:'costDay',   decimals:0, unit:'R$',    accent:'accent-warn',  higher:false },
+  ];
+
+  const grid = document.getElementById('kpi-grid');
+  grid.innerHTML = '';
+  kpis.forEach(k => {
+    const stat = k.manual || res[k.key];
+    if (!stat) return;
+    const d = delta(k.key);
+    const dir = deltaDir(k.key, k.higher);
+    const alertCls = k.alert || '';
+    const card = document.createElement('div');
+    card.className = `kpi-card ${k.accent} ${alertCls}`;
+    card.innerHTML = `
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${stat.mean.toFixed(k.decimals)}<span style="font-size:14px;font-weight:400;color:var(--muted)"> ${k.unit}</span></div>
+      <div class="kpi-ci">IC95: [${stat.lo.toFixed(k.decimals)}; ${stat.hi.toFixed(k.decimals)}]</div>
+      ${base && d ? `<div class="kpi-delta ${dir}">${d} vs baseline</div>` : ''}
+      ${alertCls==='alert-high' ? '<div class="kpi-delta down">⚠️ Acima do limite!</div>' : ''}
+    `;
+    grid.appendChild(card);
+  });
+}
+
+// ===================== FLUXO VISUAL =====================
+function updateFlowDiagram(res, p) {
+  const isBottleneck = (res.utilMont.mean >= res.utilInsp.mean && res.utilMont.mean >= res.utilEmb.mean);
+  const container = document.getElementById('flow-diagram');
+  container.innerHTML = `
+    <div class="flow-step">
+      <div class="flow-box arrival">
+        <div class="fb-label">📦 Chegada</div>
+        <div class="fb-stat">λ = ${p.lambda} lot/h</div>
+        <div class="fb-stat">Mix A${p.mixA}% B${p.mixB}% C${p.mixC}%</div>
+      </div>
+    </div>
+    <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+    <div class="flow-step">
+      <div class="flow-box queue">
+        <div class="fb-label">⏳ Fila Mont.</div>
+        <div class="fb-stat">Espera: ${res.waitMont.mean.toFixed(1)} min</div>
+        <div class="fb-stat">FIFO</div>
+      </div>
+    </div>
+    <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+    <div class="flow-step">
+      <div class="flow-box station ${isBottleneck ? 'bottleneck' : ''}" style="position:relative">
+        ${isBottleneck ? '<span class="flow-badge gargalo">★ GARGALO</span>' : ''}
+        <div class="fb-label">🔧 Montagem</div>
+        <div class="fb-stat">s=${p.sMont} servidor(es)</div>
+        <div class="fb-stat">t̄=${p.tMont} min</div>
+        <div class="fb-util" style="color:${res.utilMont.mean>p.utilMax?'var(--danger)':'var(--purple)'}">ρ=${res.utilMont.mean.toFixed(1)}%</div>
+      </div>
+    </div>
+    <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+    <div class="flow-step">
+      <div class="flow-box queue">
+        <div class="fb-label">⏳ Fila Insp.</div>
+        <div class="fb-stat">Espera: ≈0 min</div>
+        <div class="fb-stat">FIFO</div>
+      </div>
+    </div>
+    <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+    <div class="flow-step">
+      <div class="flow-box station">
+        <div class="fb-label">🔍 Inspeção/CQ</div>
+        <div class="fb-stat">s=${p.sInsp} · t̄=${p.tInsp} min</div>
+        <div class="fb-stat">Reprova=${p.reprova}%</div>
+        <div class="fb-util" style="color:var(--purple)">ρ=${res.utilInsp.mean.toFixed(1)}%</div>
+      </div>
+    </div>
+    <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+    <div class="flow-step">
+      <div class="flow-box queue">
+        <div class="fb-label">⏳ Fila Emb.</div>
+        <div class="fb-stat">FIFO</div>
+      </div>
+    </div>
+    <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+    <div class="flow-step">
+      <div class="flow-box station">
+        <div class="fb-label">📦 Embalagem</div>
+        <div class="fb-stat">s=${p.sEmb} · t̄=${p.tEmb} min</div>
+        <div class="fb-util" style="color:var(--purple)">ρ=${res.utilEmb.mean.toFixed(1)}%</div>
+      </div>
+    </div>
+    <div class="flow-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+    <div class="flow-step">
+      <div class="flow-box exit">
+        <div class="fb-label">✅ Saída</div>
+        <div class="fb-stat">${res.throughput.mean.toFixed(0)} lotes/dia</div>
+        <div class="fb-stat">Lead: ${res.leadTime.mean.toFixed(1)} min</div>
+      </div>
+    </div>
+  `;
+}
+
+// ===================== ALERTAS =====================
+function checkAlerts(res, p) {
+  const box = document.getElementById('alerts-box');
+  box.innerHTML = '';
+  const alerts = [];
+  if (res.utilMont.mean > p.utilMax)
+    alerts.push({ cls:'danger', msg:`⚠️ Utilização da montagem (${res.utilMont.mean.toFixed(1)}%) excede o limite de ${p.utilMax}% — risco de instabilidade e filas explosivas.` });
+  else if (res.utilMont.mean > 75)
+    alerts.push({ cls:'warn', msg:`⚡ Utilização da montagem (${res.utilMont.mean.toFixed(1)}%) está elevada — monitorar crescimento de fila.` });
+  if (res.utilInsp.mean > p.utilMax)
+    alerts.push({ cls:'danger', msg:`⚠️ Utilização da inspeção (${res.utilInsp.mean.toFixed(1)}%) excede ${p.utilMax}%.` });
+  if (res.utilEmb.mean > p.utilMax)
+    alerts.push({ cls:'danger', msg:`⚠️ Utilização da embalagem (${res.utilEmb.mean.toFixed(1)}%) excede ${p.utilMax}%.` });
+  if (p.breakOn)
+    alerts.push({ cls:'warn', msg:`🔧 Cenário inclui quebra na montagem às ${p.breakT}h por ${p.breakD}h — throughput reduzido esperado.` });
+
+  // Validação Lei de Little
+  const lambdaEff = res.throughput.mean / (p.dur - p.warmup); // lotes/h
+  const wipCalc = lambdaEff * (res.leadTime.mean / 60);
+  const wipRatio = Math.abs(wipCalc - res.wipMean.mean) / (res.wipMean.mean || 1);
+  if (wipRatio < 0.25)
+    alerts.push({ cls:'success', msg:`✅ Lei de Little validada: L ≈ λ·W → ${res.wipMean.mean.toFixed(2)} ≈ ${wipCalc.toFixed(2)} (desvio ${(wipRatio*100).toFixed(1)}%)` });
+
+  alerts.forEach(a => {
+    const div = document.createElement('div');
+    div.className = `alert ${a.cls}`;
+    div.textContent = a.msg;
+    box.appendChild(div);
+  });
+}
+
+// ===================== TABELA COMPARATIVA =====================
+function buildComparisonTable() {
+  const tbody = document.getElementById('comp-tbody');
+  tbody.innerHTML = '';
+
+  const names = ['Baseline','+ Cap. Montagem','Redução Setup','Menos Retrabalho','Quebra Gargalo'];
+  const p = res => res.params;
+
+  // Encontra melhores e piores
+  const keys = { throughput: true, wipMean: false, leadTime: false, waitMont: false, utilMont: false,
+                  utilInsp: false, utilEmb: false, reworkRate: false, costDay: false };
+
+  const bests = {};
+  Object.entries(keys).forEach(([k, higher]) => {
+    const vals = [0,1,2,3,4].filter(i => lastResults[i]).map(i => ({ i, v: lastResults[i][k].mean }));
+    if (vals.length === 0) return;
+    bests[k] = higher ? vals.reduce((a,b) => a.v > b.v ? a : b).i
+                      : vals.reduce((a,b) => a.v < b.v ? a : b).i;
+  });
+
+  for (let i = 0; i <= 4; i++) {
+    const res = lastResults[i];
+    if (!res) continue;
+    const base = lastResults[0];
+    const utilLimit = res.params.utilMax;
+
+    function cell(key, decimals=1, higher=false) {
+      const s = res[key];
+      const isBest = bests[key] === i;
+      const pct = base ? ((s.mean - base[key].mean) / Math.abs(base[key].mean) * 100) : 0;
+      const sign = pct >= 0 ? '+' : '';
+      const isViolation = (key === 'utilMont' || key === 'utilInsp' || key === 'utilEmb') && s.mean > utilLimit;
+      const cls = isViolation ? 'worst' : isBest ? 'best' : '';
+      const deltaHtml = i > 0 && base ? `<span class="ci-text">${sign}${pct.toFixed(1)}%</span>` : '';
+      return `<td class="${cls}">${s.mean.toFixed(decimals)}<span class="ci-text">[${s.lo.toFixed(decimals)};${s.hi.toFixed(decimals)}]</span>${deltaHtml}</td>`;
+    }
+
+    const statusTag = res.utilMont.mean > utilLimit
+      ? '<span class="tag tag-danger">⚠️ Risco</span>'
+      : res.utilMont.mean > 75
+        ? '<span class="tag tag-warn">⚡ Atenção</span>'
+        : '<span class="tag tag-success">✅ OK</span>';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="scenario-name">${i}. ${names[i]}</td>
+      ${cell('throughput', 0, true)}
+      ${cell('wipMean', 2, false)}
+      ${cell('leadTime', 1, false)}
+      ${cell('waitMont', 1, false)}
+      ${cell('utilMont', 1, false)}
+      ${cell('utilInsp', 1, false)}
+      ${cell('utilEmb',  1, false)}
+      ${cell('reworkRate', 1, false)}
+      ${cell('costDay', 0, false)}
+      <td>${statusTag}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+// ===================== GRÁFICOS =====================
+let charts = {};
+
+function initCharts() {
+  const chartDefs = [
+    { id: 'chart-queue',      type: 'line' },
+    { id: 'chart-util',       type: 'line' },
+    { id: 'chart-throughput', type: 'line' },
+    { id: 'chart-compare',    type: 'bar'  },
+  ];
+  chartDefs.forEach(def => {
+    const ctx = document.getElementById(def.id).getContext('2d');
+    if (charts[def.id]) charts[def.id].destroy();
+    charts[def.id] = new Chart(ctx, {
+      type: def.type,
+      data: { labels: [], datasets: [] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12 } } },
+        scales: {
+          x: { ticks: { font: { size: 10 } }, grid: { color: '#f0f0f0' } },
+          y: { ticks: { font: { size: 10 } }, grid: { color: '#f0f0f0' } },
+        },
+        animation: { duration: 400 },
+      }
+    });
+  });
+}
+
+function updateCharts(res, p) {
+  const labels = Array.from({ length: res.H }, (_, i) => `${i}h`);
+
+  // Chart 1: Filas
+  const c1 = charts['chart-queue'];
+  c1.data.labels = labels;
+  c1.data.datasets = [
+    { label: 'Fila Montagem', data: res.hourly.hourlyQMont, borderColor:'#dc2626', backgroundColor:'rgba(220,38,38,.1)', tension:.3, fill:true },
+    { label: 'Fila Inspeção', data: res.hourly.hourlyQInsp, borderColor:'#7c3aed', backgroundColor:'rgba(124,58,237,.1)', tension:.3, fill:true },
+    { label: 'Fila Embalagem',data: res.hourly.hourlyQEmb,  borderColor:'#d97706', backgroundColor:'rgba(217,119,6,.1)',  tension:.3, fill:true },
+  ];
+  c1.update();
+
+  // Chart 2: Utilização
+  const c2 = charts['chart-util'];
+  c2.data.labels = labels;
+  c2.data.datasets = [
+    { label: 'Util. Montagem (%)',  data: res.hourly.hourlyUMont, borderColor:'#dc2626', tension:.3 },
+    { label: 'Util. Inspeção (%)',  data: res.hourly.hourlyUInsp, borderColor:'#7c3aed', tension:.3 },
+    { label: 'Util. Embalagem (%)', data: res.hourly.hourlyUEmb,  borderColor:'#d97706', tension:.3 },
+    { label: `Limite ${p.utilMax}%`, data: Array(res.H).fill(p.utilMax), borderColor:'#dc262640', borderDash:[6,3], borderWidth:1.5, pointRadius:0 },
+  ];
+  c2.update();
+
+  // Chart 3: Throughput acumulado
+  const cumApp = [], cumRew = [];
+  let sa = 0, sr = 0;
+  res.hourly.hourlyApproved.forEach((v,i) => { sa += v; cumApp.push(sa); });
+  res.hourly.hourlyRework.forEach((v,i) => { sr += v; cumRew.push(sr); });
+  const c3 = charts['chart-throughput'];
+  c3.data.labels = labels;
+  c3.data.datasets = [
+    { label: 'Aprovados (acum.)',   data: cumApp, borderColor:'#16a34a', backgroundColor:'rgba(22,163,74,.1)', tension:.3, fill:true },
+    { label: 'Retrabalho (acum.)',  data: cumRew, borderColor:'#dc2626', backgroundColor:'rgba(220,38,38,.1)', tension:.3, fill:true },
+  ];
+  c3.update();
+}
+
+function updateCompareChart() {
+  const c4 = charts['chart-compare'];
+  const names = ['Baseline','+Cap.Mont','Red.Setup','Menos Retrab.','Quebra'];
+  const colors = ['#2563eb','#16a34a','#d97706','#7c3aed','#dc2626'];
+
+  const throughputs = [0,1,2,3,4].map(i => lastResults[i] ? lastResults[i].throughput.mean : null);
+  const errs        = [0,1,2,3,4].map(i => lastResults[i] ? lastResults[i].throughput.ci95 : null);
+
+  c4.data.labels = names;
+  c4.data.datasets = [{
+    label: 'Throughput (lotes/dia)',
+    data: throughputs,
+    backgroundColor: colors.map(c => c + 'cc'),
+    borderColor: colors,
+    borderWidth: 1,
+    error: errs,
+  }];
+
+  // Plugin de barra de erro manual
+  c4.options.plugins.customErrorBars = true;
+  c4.update();
+
+  // Desenhar barras de erro via afterDraw plugin (simples)
+  Chart.register({
+    id: 'errorBars',
+    afterDraw(chart) {
+      if (!chart.data.datasets[0]?.error) return;
+      const ctx = chart.ctx;
+      chart.data.datasets.forEach((ds, di) => {
+        if (!ds.error) return;
+        const meta = chart.getDatasetMeta(di);
+        meta.data.forEach((bar, i) => {
+          const err = ds.error[i];
+          if (err == null) return;
+          const x = bar.x, y = bar.y;
+          const yBase = chart.scales.y.getPixelForValue(ds.data[i] + err);
+          const yTop  = chart.scales.y.getPixelForValue(ds.data[i] - err);
+          ctx.save();
+          ctx.strokeStyle = '#333';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(x, yBase); ctx.lineTo(x, yTop);
+          ctx.moveTo(x-5, yBase); ctx.lineTo(x+5, yBase);
+          ctx.moveTo(x-5, yTop);  ctx.lineTo(x+5, yTop);
+          ctx.stroke();
+          ctx.restore();
+        });
+      });
+    }
+  });
+}
+
+// ===================== EXPORTAR CSV =====================
+function exportCSV() {
+  if (Object.keys(lastResults).length === 0) {
+    alert('Execute a simulação primeiro.');
+    return;
+  }
+  const headers = ['Cenario','Throughput_mean','Throughput_lo','Throughput_hi',
+    'WIP_mean','WIP_lo','WIP_hi','LeadTime_mean','LeadTime_lo','LeadTime_hi',
+    'WaitMont_mean','UtilMont_mean','UtilInsp_mean','UtilEmb_mean',
+    'ReworkRate_mean','CostDay_mean','Reps'];
+  const rows = [headers.join(',')];
+  const names = ['Baseline','+Cap.Montagem','Red.Setup','Menos Retrabalho','Quebra Gargalo'];
+  Object.entries(lastResults).forEach(([idx, res]) => {
+    const r = [
+      names[idx] || 'Personalizado',
+      res.throughput.mean.toFixed(2), res.throughput.lo.toFixed(2), res.throughput.hi.toFixed(2),
+      res.wipMean.mean.toFixed(3), res.wipMean.lo.toFixed(3), res.wipMean.hi.toFixed(3),
+      res.leadTime.mean.toFixed(2), res.leadTime.lo.toFixed(2), res.leadTime.hi.toFixed(2),
+      res.waitMont.mean.toFixed(2), res.utilMont.mean.toFixed(2), res.utilInsp.mean.toFixed(2),
+      res.utilEmb.mean.toFixed(2), res.reworkRate.mean.toFixed(2), res.costDay.mean.toFixed(2), res.n
+    ];
+    rows.push(r.join(','));
+  });
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'simulacao_engf84_grupo2.csv';
+  a.click();
+}
+
+// ===================== RESUMO EXECUTIVO =====================
+function copyExecutiveSummary() {
+  const res = lastResults[currentScenario];
+  if (!res) { alert('Execute a simulação primeiro.'); return; }
+  const p = res.params;
+  const txt = `
+RESUMO EXECUTIVO — Simulador Linha de Produção
+ENGF84 · Grupo 2 · ${new Date().toLocaleDateString('pt-BR')}
+==============================================
+Cenário: ${p._name}
+Parâmetros: λ=${p.lambda} lot/h · Montagem s=${p.sMont} t̄=${p.tMont}min · Inspeção s=${p.sInsp} t̄=${p.tInsp}min · Embalagem s=${p.sEmb} t̄=${p.tEmb}min
+Replicações: ${res.n} · Duração: ${p.dur}h · Warm-up: ${p.warmup}h
+
+RESULTADOS (IC 95%):
+  Throughput : ${res.throughput.mean.toFixed(1)} lotes/dia  [${res.throughput.lo.toFixed(1)}; ${res.throughput.hi.toFixed(1)}]
+  WIP Médio  : ${res.wipMean.mean.toFixed(2)} lotes        [${res.wipMean.lo.toFixed(2)}; ${res.wipMean.hi.toFixed(2)}]
+  Lead Time  : ${res.leadTime.mean.toFixed(1)} min         [${res.leadTime.lo.toFixed(1)}; ${res.leadTime.hi.toFixed(1)}]
+  Espera Mont: ${res.waitMont.mean.toFixed(1)} min         [${res.waitMont.lo.toFixed(1)}; ${res.waitMont.hi.toFixed(1)}]
+  Util. Mont : ${res.utilMont.mean.toFixed(1)}%            [${res.utilMont.lo.toFixed(1)}; ${res.utilMont.hi.toFixed(1)}]
+  Util. Insp : ${res.utilInsp.mean.toFixed(1)}%
+  Util. Emb  : ${res.utilEmb.mean.toFixed(1)}%
+  Retrabalho : ${res.reworkRate.mean.toFixed(1)}%
+  Custo/dia  : R$ ${res.costDay.mean.toFixed(0)}
+
+LEI DE LITTLE (validação):
+  L ≈ λ·W → WIP ≈ ${res.wipMean.mean.toFixed(2)} lotes
+`.trim();
+  navigator.clipboard.writeText(txt).then(() => alert('Resumo copiado!'));
+}
+
+// ===================== INICIALIZAÇÃO =====================
+window.addEventListener('DOMContentLoaded', () => {
+  initCharts();
+  loadScenario(0);
+  // Roda baseline automaticamente ao carregar
+  setTimeout(() => runSimulation(), 100);
+});
+</script>
+</body>
+</html>
