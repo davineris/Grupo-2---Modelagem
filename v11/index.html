@@ -1,0 +1,2757 @@
+<!DOCTYPE html>
+<!--
+  V11 — Simulador de Teoria das Filas | Linha de Produtos de Limpeza
+  ENGF84 · Grupo 2
+  Serviço lognormal com CV real por etapa — corrige superestimação de lead/WIP/util (V&V).
+  Cenário "Menos Retrabalho" corrigido (setup 5→0). Réplicas 30→34.
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Simulador de Filas — Linha de Limpeza | V11 | ENGF84</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ==================== RESET & VARS ==================== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --c1:#06141B; --c2:#11212D; --c3:#253745; --c4:#4A5C6A;
+  --c5:#9BA8AB; --c6:#CCD0CF;
+  --bg:#F5F6F7; --surface:#ffffff;
+  --border:#CCD0CF; --border-strong:#9BA8AB;
+  --text:var(--c1); --muted:var(--c4);
+  --primary:var(--c2); --primary-l:#E8EAEB;
+  --success:#16a34a; --success-l:#dcfce7;
+  --warning:#d97706; --warning-l:#fef3c7;
+  --danger:#dc2626; --danger-l:#fee2e2;
+  --nav-h:56px; --gap:16px; --r:10px;
+  --shadow:0 1px 4px rgba(6,20,27,.08);
+  --shadow-md:0 4px 16px rgba(6,20,27,.12);
+}
+
+/* ==================== LOT DETAIL MODAL ==================== */
+.modal-overlay{position:fixed;inset:0;z-index:2000;background:rgba(6,20,27,.6);display:none;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto;}
+.modal-overlay.open{display:flex;}
+.modal-box{background:var(--surface);border-radius:12px;box-shadow:var(--shadow-md);width:100%;max-width:1100px;display:flex;flex-direction:column;max-height:calc(100vh - 48px);}
+.modal-head{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--c2);color:#fff;border-radius:12px 12px 0 0;}
+.modal-head h3{flex:1;font-size:15px;color:#fff;}
+.modal-close{background:none;border:none;font-size:20px;color:var(--c6);cursor:pointer;line-height:1;}
+.modal-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 18px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.modal-toolbar input{border:1.5px solid var(--border);border-radius:6px;padding:5px 10px;font-size:12px;width:180px;}
+.modal-toolbar select{border:1.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;}
+.modal-stats{display:flex;gap:8px;flex-wrap:wrap;padding:8px 18px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg);}
+.mstat{font-size:11px;color:var(--muted);}
+.mstat strong{color:var(--text);font-size:13px;}
+.modal-table-wrap{flex:1;overflow:auto;}
+.lot-table{width:100%;border-collapse:collapse;font-size:11px;}
+.lot-table th{position:sticky;top:0;background:var(--c6);padding:7px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--c3);white-space:nowrap;cursor:pointer;user-select:none;border-bottom:2px solid var(--border-strong);}
+.lot-table th:hover{background:var(--c5);color:var(--c1);}
+.lot-table th.sort-asc::after{content:' ▲';}
+.lot-table th.sort-desc::after{content:' ▼';}
+.lot-table td{padding:5px 10px;border-bottom:1px solid #eceeed;white-space:nowrap;}
+.lot-table tr:hover td{background:var(--bg);}
+.lot-table tr.row-rework td{background:#fff7ed;}
+.lot-table tr.row-wip td{background:var(--primary-l);}
+.lot-table tr.row-lost td{background:#fff1f2;color:#be123c;}
+.badge-type{display:inline-block;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:700;}
+.badge-A{background:var(--c6);color:var(--c2);}
+.badge-B{background:var(--c5);color:var(--c1);}
+.badge-C{background:var(--c3);color:var(--c6);}
+.badge-status-done{background:var(--success-l);color:#14532d;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:700;}
+.badge-status-wip{background:var(--primary-l);color:var(--c2);padding:1px 7px;border-radius:99px;font-size:10px;font-weight:700;}
+.badge-status-lost{background:var(--danger-l);color:#991b1b;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:700;}
+.modal-foot{padding:10px 18px;border-top:1px solid var(--border);display:flex;gap:6px;justify-content:flex-end;flex-shrink:0;}
+
+/* ==================== SIM HELP MODAL ==================== */
+.help-overlay{position:fixed;inset:0;z-index:2100;background:rgba(6,20,27,.6);display:none;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto;}
+.help-overlay.open{display:flex;}
+.help-box{background:var(--surface);border-radius:12px;box-shadow:var(--shadow-md);width:100%;max-width:760px;display:flex;flex-direction:column;max-height:calc(100vh - 48px);}
+.help-head{display:flex;align-items:center;gap:10px;padding:16px 20px;background:var(--c2);color:#fff;border-radius:12px 12px 0 0;flex-shrink:0;}
+.help-head h3{flex:1;font-size:16px;color:#fff;}
+.help-head .help-close{background:none;border:none;font-size:22px;color:var(--c6);cursor:pointer;line-height:1;}
+.help-body{padding:18px 22px;overflow-y:auto;}
+.help-section{margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);}
+.help-section:last-child{border-bottom:none;margin-bottom:0;}
+.help-section h4{font-size:14px;font-weight:700;color:var(--c1);margin-bottom:6px;display:flex;align-items:center;gap:8px;}
+.help-section p,.help-section li{font-size:12.5px;color:var(--c3);line-height:1.65;}
+.help-section ul{list-style:none;margin-top:4px;}
+.help-section ul li{padding:2px 0 2px 16px;position:relative;}
+.help-section ul li::before{content:'→';position:absolute;left:0;color:var(--c4);font-weight:700;}
+.help-foot{padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;flex-shrink:0;}
+
+/* ==================== EVENT LOG ==================== */
+.event-log-wrap{background:#06141B;border-radius:8px;padding:10px;font-family:'Courier New',monospace;font-size:11px;height:220px;overflow-y:auto;display:flex;flex-direction:column-reverse;gap:2px;}
+.event-log-wrap::-webkit-scrollbar{width:5px;}
+.event-log-wrap::-webkit-scrollbar-thumb{background:#253745;border-radius:4px;}
+.log-entry{display:flex;gap:8px;align-items:flex-start;line-height:1.5;}
+.log-ts{color:#4A5C6A;white-space:nowrap;min-width:52px;}
+.log-badge{padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;white-space:nowrap;}
+.log-badge.info{background:#253745;color:#CCD0CF;}
+.log-badge.warn{background:#92400e;color:#fde68a;}
+.log-badge.danger{background:#991b1b;color:#fecaca;}
+.log-badge.success{background:#14532d;color:#bbf7d0;}
+.log-badge.muted{background:#11212D;color:#9BA8AB;}
+.log-text{color:#CCD0CF;flex:1;}
+.log-controls{display:flex;gap:6px;align-items:center;margin-bottom:6px;}
+.log-filter{background:#11212D;border:1px solid #253745;color:#CCD0CF;border-radius:5px;padding:3px 8px;font-size:11px;font-family:inherit;}
+
+body{font-family:'Inter','Segoe UI',Arial,sans-serif;font-size:13px;background:var(--bg);color:var(--text);min-height:100vh;}
+h1,h2,h3,h4{font-weight:700;}
+button{cursor:pointer;font-family:inherit;font-size:13px;}
+input,select{font-family:inherit;font-size:12px;}
+
+/* ==================== NAV ==================== */
+.app-nav{position:sticky;top:0;z-index:100;background:#11212D;display:flex;align-items:center;gap:16px;padding:0 20px;height:var(--nav-h);box-shadow:0 2px 8px rgba(6,20,27,.25);}
+.nav-brand{display:flex;align-items:center;gap:8px;flex:1;}
+.nav-brand-title{color:#fff;font-size:14px;font-weight:700;white-space:nowrap;}
+.v-badge{background:#4A5C6A;color:#fff;font-size:10px;font-weight:900;padding:2px 7px;border-radius:99px;letter-spacing:.5px;}
+.nav-tabs{display:flex;gap:4px;}
+.nav-tab{background:rgba(204,208,207,.12);color:rgba(204,208,207,.7);border:none;border-radius:6px;padding:6px 16px;font-size:13px;font-weight:600;transition:all .15s;}
+.nav-tab:hover{background:rgba(204,208,207,.22);color:#fff;}
+.nav-tab.active{background:#CCD0CF;color:#06141B;}
+.nav-meta{color:rgba(204,208,207,.5);font-size:11px;white-space:nowrap;}
+
+/* ==================== TABS ==================== */
+.tab-content{display:none;}
+.tab-content.active{display:block;}
+
+/* ==================== CONTAINER ==================== */
+.page{max-width:1500px;margin:0 auto;padding:var(--gap);}
+.section{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:var(--gap);margin-bottom:var(--gap);box-shadow:var(--shadow);}
+.section-title{font-size:14px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px;color:var(--c1);}
+
+/* ==================== DASHBOARD HEADER ==================== */
+.dash-header{background:linear-gradient(135deg,#06141B 0%,#253745 100%);color:#fff;border-radius:var(--r);padding:20px 24px;margin-bottom:var(--gap);}
+.dash-header h1{font-size:18px;margin-bottom:4px;}
+.dash-header p{opacity:.85;font-size:12px;line-height:1.6;}
+.dash-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
+.dash-meta span{background:rgba(204,208,207,.15);border-radius:6px;padding:3px 10px;font-size:11px;}
+.dash-meta .bottleneck-tag{background:var(--warning-l);color:#92400e;font-weight:700;}
+
+/* ==================== KPI GRID ==================== */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;}
+.kpi-card{border:1px solid var(--border);border-radius:8px;padding:10px 12px;border-top:3px solid var(--c3);}
+.kpi-label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--c4);margin-bottom:3px;}
+.kpi-value{font-size:24px;font-weight:700;color:var(--c1);}
+.kpi-sub{font-size:11px;color:var(--c5);margin-top:2px;}
+
+/* ==================== CHARTS ==================== */
+.charts-2{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);}
+.charts-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--gap);}
+@media(max-width:900px){.charts-2,.charts-3{grid-template-columns:1fr;}}
+.chart-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;box-shadow:var(--shadow);}
+.chart-box h4{font-size:12px;font-weight:600;margin-bottom:8px;color:var(--c2);}
+.chart-wrap{position:relative;height:220px;}
+.chart-wrap.tall{height:270px;}
+
+/* ==================== BOTTLENECK DIAGNOSIS ==================== */
+.diag-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);}
+@media(max-width:800px){.diag-grid{grid-template-columns:1fr;}}
+.diag-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.diag-bar-label{width:90px;font-size:11px;font-weight:600;}
+.diag-bar-track{flex:1;height:18px;background:var(--c6);border-radius:99px;overflow:hidden;}
+.diag-bar-fill{height:100%;border-radius:99px;display:flex;align-items:center;padding-left:6px;font-size:10px;color:#fff;font-weight:700;transition:width .6s;}
+.diag-bar-val{width:40px;text-align:right;font-size:11px;font-weight:700;}
+.bottleneck-highlight{border:2px solid var(--danger) !important;box-shadow:0 0 0 3px rgba(220,38,38,.15) !important;}
+
+/* ==================== SIMULATION LAYOUT ==================== */
+.sim-layout{display:grid;grid-template-columns:1fr 300px;gap:var(--gap);align-items:start;}
+@media(max-width:1100px){.sim-layout{grid-template-columns:1fr;}}
+.sim-main{min-width:0;}
+.sim-sidebar{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:0;box-shadow:var(--shadow);position:sticky;top:calc(var(--nav-h) + 10px);overflow:hidden;}
+
+/* ===== V7 LAYOUT 3 COLUNAS ===== */
+.sim-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--gap);
+}
+.sim-layout-v7 {
+  display: grid;
+  grid-template-columns: 280px 1fr 300px;
+  gap: var(--gap);
+  align-items: start;
+}
+@media (max-width: 1200px) {
+  .sim-layout-v7 { grid-template-columns: 260px 1fr; }
+  .sim-scenarios-sidebar { display: none; }
+}
+@media (max-width: 900px) {
+  .sim-layout-v7 { grid-template-columns: 1fr; }
+  .sim-params-sidebar { position: static; max-height: none; }
+}
+
+/* Sidebar esquerda de parâmetros */
+.sim-params-sidebar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  position: sticky;
+  top: calc(var(--nav-h) + 10px);
+  max-height: calc(100vh - var(--nav-h) - 30px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.sim-params-sidebar::-webkit-scrollbar { width: 4px; }
+.sim-params-sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.params-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+.params-stab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.params-actions {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
+}
+.params-actions-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.btn-full { width: 100%; text-align: center; }
+.sim-params-sidebar .param-group-v5 { margin-bottom: 8px; }
+.sim-params-sidebar .param-group-body { grid-template-columns: 1fr; }
+.sim-params-sidebar .param-group-header { padding: 8px 12px; }
+.sim-params-sidebar .param-label { font-size: 11px; }
+.sim-params-sidebar .param-input { font-size: 12px; padding: 4px 7px; }
+
+/* Sidebar direita de cenários */
+.sim-scenarios-sidebar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  position: sticky;
+  top: calc(var(--nav-h) + 10px);
+  max-height: calc(100vh - var(--nav-h) - 30px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.scen-sidebar-head {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.scen-def-list {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.scen-def-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.scen-def-item.highlight-warn { border-color: #d97706; background: #fef3c7; }
+.scen-def-num {
+  min-width: 20px;
+  height: 20px;
+  background: var(--c3);
+  color: var(--c6);
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+.scen-def-name { font-size: 11px; font-weight: 700; color: var(--c1); }
+.scen-def-desc { font-size: 10px; color: var(--c4); line-height: 1.4; margin-top: 1px; }
+.sc-delta-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--c4);
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.delta-val { font-weight: 700; }
+.delta-val.up { color: var(--success); }
+.delta-val.dn { color: var(--danger); }
+
+/* ==================== FACTORY SVG ==================== */
+.factory-container{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;overflow:hidden;}
+.factory-container svg{display:block;width:100%;max-height:220px;}
+
+/* ===== FACTORY V6 ===== */
+.factory-container-v6 {
+  background: #11212D;
+  border-radius: 10px;
+  padding: 8px;
+  overflow: hidden;
+  border: 1px solid #253745;
+}
+.factory-container-v6 svg {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+}
+@keyframes beltMove {
+  from { stroke-dashoffset: 24; }
+  to   { stroke-dashoffset: 0; }
+}
+.belt-animated {
+  stroke: #4A5C6A;
+  stroke-width: 5;
+  stroke-dasharray: 10 6;
+  animation: beltMove 0.5s linear infinite;
+}
+.belt-rail { stroke:#253745; stroke-width:2; }
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.mixer-blade {
+  transform-origin: 248px 110px;
+  animation: spin 1.5s linear infinite;
+}
+@keyframes laserScan {
+  0%, 100% { opacity: 0.15; }
+  50%       { opacity: 1; }
+}
+.laser-beam {
+  stroke: #4ade80;
+  stroke-width: 1.5;
+  animation: laserScan 1.2s ease-in-out infinite;
+}
+@keyframes pressDown {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(10px); }
+}
+.press-arm { animation: pressDown 1s ease-in-out infinite; }
+@keyframes bubbleRise {
+  0%   { opacity: 0.8; transform: translateY(0); }
+  100% { opacity: 0;   transform: translateY(-14px); }
+}
+.bubble.b1 { animation: bubbleRise 1s ease-out 0s infinite; }
+.bubble.b2 { animation: bubbleRise 1s ease-out 0.3s infinite; }
+.bubble.b3 { animation: bubbleRise 1s ease-out 0.6s infinite; }
+@keyframes pulse-danger {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+#breakdown-overlay text { animation: pulse-danger 0.8s ease-in-out infinite; }
+@keyframes glow-ring {
+  0%, 100% { stroke-width: 0; opacity: 0; }
+  50%       { stroke-width: 5; opacity: 0.5; }
+}
+.station-label-v6 { fill:#CCD0CF; font-weight:700; }
+.station-sub-v6 { fill:#9BA8AB; }
+.queue-zone-v6 { fill:none; stroke:#4A5C6A; stroke-width:1; stroke-dasharray:3 3; }
+
+/* ==================== METRICS STRIP ==================== */
+.metrics-strip{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.metric-pill{background:var(--c6);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:11px;}
+.metric-pill strong{display:block;font-size:13px;color:var(--c1);}
+.metric-pill span{color:var(--c4);}
+.metric-pill.alert{background:var(--danger-l);border-color:var(--danger);}
+.metric-pill.warn{background:var(--warning-l);border-color:var(--warning);}
+
+/* ==================== PARAMS (V5 GROUPS) ==================== */
+.params-toggle{background:none;border:1.5px solid var(--border);border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--c2);width:100%;text-align:left;margin-bottom:8px;}
+.params-body{display:none;}
+.params-body.open{display:block;}
+.param-group-v5{
+  border:1.5px solid var(--border);
+  border-radius:10px;
+  overflow:hidden;
+  margin-bottom:12px;
+}
+.param-group-header{
+  background:var(--c6);
+  padding:10px 14px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  border-bottom:1px solid var(--border);
+}
+.param-group-icon{font-size:20px;}
+.param-group-title{font-size:13px;font-weight:700;color:var(--c1);}
+.param-group-desc{font-size:11px;color:var(--c4);}
+.param-group-body{padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.param-field{display:flex;flex-direction:column;gap:3px;}
+.param-field.full{grid-column:1 / -1;}
+.param-label{font-size:11px;font-weight:600;color:var(--c3);}
+.param-input{border:1.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;color:var(--c1);background:#fff;}
+.param-input:focus{outline:none;border-color:var(--c3);}
+.param-slider-row{display:flex;align-items:center;gap:8px;}
+.param-slider-row input[type=range]{flex:1;accent-color:var(--c3);}
+.param-slider-row .vd{width:42px;text-align:right;font-size:12px;font-weight:700;color:var(--c2);}
+.param-group-v5.stage-active{border-color:var(--c3);box-shadow:0 0 0 3px rgba(37,55,69,.12);}
+@media(max-width:700px){.param-group-body{grid-template-columns:1fr;}}
+
+.params-head-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+.params-head-row .ph-title{font-size:13px;font-weight:700;color:var(--c1);}
+
+/* ==================== BUTTONS ==================== */
+.btn-row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;}
+.btn{padding:7px 14px;border-radius:6px;border:none;font-size:12px;font-weight:700;transition:opacity .15s;}
+.btn:hover{opacity:.88;}
+.btn-primary{background:#11212D;color:#fff;}
+.btn-secondary{background:#253745;color:#CCD0CF;}
+.btn-outline{background:transparent;border:1.5px solid #9BA8AB;color:#253745;}
+.btn-ghost{background:transparent;color:#4A5C6A;}
+.btn-success{background:var(--success);color:#fff;}
+.btn-warning{background:var(--warning);color:#fff;}
+.btn-danger{background:var(--danger);color:#fff;}
+.btn-sm{padding:4px 9px;font-size:11px;}
+
+/* ==================== PROGRESS ==================== */
+.progress-wrap{height:6px;background:var(--c6);border-radius:99px;overflow:hidden;margin-top:6px;display:none;}
+.progress-fill{height:100%;background:var(--c3);transition:width .2s;}
+#sim-status{font-size:11px;color:var(--muted);margin-top:4px;min-height:16px;}
+
+/* ==================== SIDEBAR ==================== */
+.sidebar-header{background:#253745;color:#CCD0CF;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;}
+.sidebar-header .sidebar-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;color:#CCD0CF;margin:0;}
+.sidebar-inner{padding:12px;}
+.sidebar-title{font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;}
+.scenario-card{border:1.5px solid var(--border-strong);border-radius:6px;padding:8px;margin-bottom:6px;cursor:pointer;transition:all .15s;}
+.scenario-card:hover{border-color:var(--c3);}
+.scenario-card.active{border-color:#11212D;background:var(--bg);}
+.scenario-card.best{border-color:var(--success);}
+.scenario-card.violation{border-color:var(--danger);background:var(--danger-l);}
+.sc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+.sc-name{font-size:11px;font-weight:700;color:var(--c1);}
+.sc-badge{font-size:9px;padding:1px 6px;border-radius:99px;font-weight:700;}
+.sc-badge.best{background:var(--success-l);color:var(--success);}
+.sc-badge.warn{background:var(--warning-l);color:var(--warning);}
+.sc-badge.bad{background:var(--danger-l);color:var(--danger);}
+.sc-badge.ok{background:var(--success-l);color:var(--success);}
+.sc-metrics{display:grid;grid-template-columns:1fr 1fr;gap:3px;}
+.sc-metric{font-size:10px;}
+.sc-metric .v{font-weight:700;font-size:11px;}
+.sc-metric .d{font-size:9px;}
+.sc-metric .d.up{color:var(--success);}
+.sc-metric .d.dn{color:var(--danger);}
+.sc-pending{text-align:center;padding:20px;color:var(--muted);font-size:12px;}
+.sidebar-actions{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px;}
+
+/* ==================== ALERTS ==================== */
+.alert{padding:7px 10px;border-radius:6px;font-size:11px;margin-bottom:6px;display:flex;align-items:center;gap:6px;}
+.alert.danger{background:var(--danger-l);color:#991b1b;}
+.alert.warn{background:var(--warning-l);color:#92400e;}
+.alert.success{background:var(--success-l);color:#14532d;}
+.alert.info{background:var(--primary-l);color:var(--c2);}
+#alerts-sim{margin-bottom:8px;}
+
+/* ==================== WIDGET ==================== */
+#widget-btn{position:fixed;bottom:20px;right:20px;z-index:1000;background:#253745;color:#fff;border:none;border-radius:99px;padding:10px 16px;font-size:13px;font-weight:700;box-shadow:0 4px 12px rgba(6,20,27,.4);cursor:pointer;display:flex;align-items:center;gap:6px;}
+#widget-btn:hover{background:#11212D;}
+#widget-panel{position:fixed;bottom:70px;right:20px;z-index:999;width:340px;max-height:520px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-md);display:none;flex-direction:column;overflow:hidden;}
+#widget-panel.open{display:flex;}
+.widget-header{background:#11212D;color:#fff;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;}
+.widget-header h4{font-size:13px;color:#fff;}
+.widget-close{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;}
+.widget-body{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;}
+.widget-msg{max-width:85%;padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.5;}
+.widget-msg.bot{background:var(--c6);color:var(--c1);align-self:flex-start;border-bottom-left-radius:2px;}
+.widget-msg.user{background:#253745;color:#fff;align-self:flex-end;border-bottom-right-radius:2px;}
+.widget-questions{padding:8px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;}
+.widget-q-btn{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;text-align:left;cursor:pointer;transition:background .1s;}
+.widget-q-btn:hover{background:var(--c6);}
+.widget-input-row{display:flex;gap:4px;padding:8px;border-top:1px solid var(--border);}
+.widget-input{flex:1;border:1.5px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;}
+.widget-send{background:#253745;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;}
+
+/* ==================== MISC ==================== */
+.tag{display:inline-block;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;}
+.tag-g{background:var(--success-l);color:var(--success);}
+.tag-r{background:var(--danger-l);color:var(--danger);}
+.tag-o{background:var(--warning-l);color:var(--warning);}
+.tag-b{background:var(--primary-l);color:var(--c2);}
+.premissas-list{list-style:none;}
+.premissas-list li{padding:3px 0;font-size:12px;border-bottom:1px solid #eceeed;color:var(--c3);}
+.premissas-list li::before{content:'→ ';color:var(--c4);font-weight:700;}
+.premissas-list li:last-child{border-bottom:none;}
+.sim-time-bar{background:#253745;color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;}
+.sim-time-bar strong{font-size:14px;}
+
+/* ==================== V8 OPS HEADER ==================== */
+.ops-header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:var(--c2);border-radius:12px;padding:16px 24px;margin-bottom:var(--gap);border:1px solid var(--c3);}
+.ops-brand{display:flex;align-items:center;gap:12px;}
+.ops-brand-icon{font-size:32px;}
+.ops-brand-name{font-size:16px;font-weight:800;color:#fff;letter-spacing:-0.3px;}
+.ops-brand-sub{font-size:11px;color:var(--c5);margin-top:2px;}
+.ops-status-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.ops-status-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--c5);}
+.ops-status-dot{width:7px;height:7px;border-radius:50%;}
+.ops-status-dot.green{background:#4ade80;box-shadow:0 0 6px #4ade80;}
+.ops-alert-chip{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:700;position:relative;cursor:default;}
+.ops-alert-chip.danger{background:rgba(220,38,38,.15);border:1px solid rgba(220,38,38,.4);color:#fca5a5;}
+
+/* ===== GARGALO TOOLTIP ===== */
+.bottleneck-tooltip{
+  position:absolute;
+  top:calc(100% + 10px);
+  right:0;
+  width:310px;
+  background:#06141B;
+  border:1px solid #253745;
+  border-radius:12px;
+  padding:16px;
+  z-index:500;
+  opacity:0;
+  pointer-events:none;
+  transform:translateY(-6px);
+  transition:opacity .2s ease, transform .2s ease;
+  box-shadow:0 12px 32px rgba(0,0,0,.5);
+  text-align:left;
+}
+.ops-alert-chip:hover .bottleneck-tooltip{opacity:1;pointer-events:auto;transform:translateY(0);}
+.bottleneck-tooltip::before{
+  content:'';
+  position:absolute;
+  top:-6px;right:20px;
+  width:10px;height:10px;
+  background:#06141B;
+  border-left:1px solid #253745;
+  border-top:1px solid #253745;
+  transform:rotate(45deg);
+}
+.btt-title{font-size:12px;font-weight:800;color:#fff;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+.btt-body{font-size:11px;color:#9BA8AB;line-height:1.65;margin-bottom:12px;}
+.btt-evidence{display:flex;flex-direction:column;gap:6px;}
+.btt-ev-row{display:flex;align-items:center;gap:8px;}
+.btt-ev-icon{font-size:14px;width:20px;text-align:center;flex-shrink:0;}
+.btt-ev-text{font-size:11px;color:#CCD0CF;flex:1;}
+.btt-ev-text strong{color:#fff;}
+.btt-ev-text .ev-sub{color:#4A5C6A;font-size:10px;}
+.btt-divider{border:none;border-top:1px solid #253745;margin:10px 0;}
+.btt-conclusion{font-size:10px;color:#4A5C6A;font-style:italic;}
+
+/* ==================== V8 FILTER BAR ==================== */
+.dash-filters-bar{display:flex;align-items:center;gap:20px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 16px;margin-bottom:var(--gap);}
+.dash-filters-left,.dash-filters-right{display:flex;align-items:center;gap:8px;}
+.dash-filter-label{font-size:11px;font-weight:700;color:var(--c4);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;}
+.dash-filter-group{display:flex;gap:4px;flex-wrap:wrap;}
+.dash-filter-btn{background:var(--bg);border:1.5px solid var(--border);border-radius:6px;padding:4px 12px;font-size:12px;font-weight:500;color:var(--c4);cursor:pointer;transition:all .15s;font-family:inherit;}
+.dash-filter-btn:hover{border-color:var(--c4);color:var(--c1);}
+.dash-filter-btn.active{background:var(--c2);border-color:var(--c2);color:#fff;font-weight:700;}
+
+/* ==================== V8 KPI SECTION ==================== */
+.kpi-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:var(--gap);}
+.kpi-section-header{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);}
+.kpi-section-title{font-size:14px;font-weight:700;color:var(--c1);}
+.kpi-section-subtitle{font-size:11px;color:var(--c4);}
+.kpi-grid-v8{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px;}
+.kpi-card-v8{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;position:relative;transition:transform .15s;}
+.kpi-card-v8:hover{transform:translateY(-1px);box-shadow:var(--shadow-md);}
+.kpi-card-v8 .kpi-icon-v8{font-size:20px;margin-bottom:8px;}
+.kpi-card-v8 .kpi-label-v8{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--c4);font-weight:600;margin-bottom:4px;}
+.kpi-card-v8 .kpi-value-v8{font-size:26px;font-weight:800;color:var(--c1);line-height:1;}
+.kpi-card-v8 .kpi-unit-v8{font-size:12px;font-weight:400;color:var(--c4);margin-left:2px;}
+.kpi-card-v8 .kpi-sub-v8{font-size:10px;color:var(--c5);margin-top:4px;}
+.kpi-trend{font-size:10px;font-weight:700;margin-top:6px;padding:2px 7px;border-radius:99px;display:inline-block;}
+.kpi-trend.up{background:#dcfce7;color:#14532d;}
+.kpi-trend.down{background:#fee2e2;color:#991b1b;}
+.kpi-trend.warn{background:#fef3c7;color:#92400e;}
+.kpi-trend.neutral{background:var(--c6);color:var(--c3);}
+.kpi-card-v8.alert-card{border-color:#dc2626;}
+.kpi-card-v8.alert-card .kpi-value-v8{color:#dc2626;}
+
+/* ==================== V8 DIAGNOSIS SECTION ==================== */
+.diag-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-top:var(--gap);}
+.diag-section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);}
+.diag-section-title{font-size:15px;font-weight:700;color:var(--c1);}
+.diag-section-sub{font-size:12px;color:var(--c4);margin-top:3px;}
+.diag-verdict{text-align:right;}
+.diag-verdict-label{font-size:10px;text-transform:uppercase;color:var(--c5);display:block;}
+.diag-verdict-value{font-size:16px;font-weight:800;color:#dc2626;}
+.diag-evidence-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;}
+@media(max-width:900px){.diag-evidence-row{grid-template-columns:1fr;}}
+.diag-evidence-card{border-radius:10px;padding:16px;border:1.5px solid;}
+.diag-evidence-card.critical{border-color:#fca5a5;background:#fff5f5;}
+.diag-evidence-card.warning{border-color:#fde68a;background:#fffbeb;}
+.diag-evidence-card.info{border-color:var(--border);background:var(--bg);}
+.diag-evidence-icon{font-size:22px;margin-bottom:6px;}
+.diag-evidence-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--c4);margin-bottom:6px;}
+.diag-evidence-value{font-size:24px;font-weight:800;color:var(--c1);margin-bottom:8px;}
+.diag-evidence-desc{font-size:11px;color:var(--c4);line-height:1.6;margin-bottom:10px;}
+.diag-evidence-bars{display:flex;flex-direction:column;gap:5px;}
+.diag-ev-bar-row{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--c4);}
+.diag-ev-bar-row span{width:65px;text-align:right;flex-shrink:0;}
+.diag-ev-track{flex:1;height:16px;background:var(--bg);border-radius:99px;overflow:hidden;border:1px solid var(--border);}
+.diag-ev-fill{height:100%;border-radius:99px;display:flex;align-items:center;padding-left:6px;font-size:9px;color:#fff;font-weight:700;min-width:4px;}
+.diag-ev-fill.ev-critical{background:#dc2626;}
+.diag-ev-fill.ev-mid{background:#253745;}
+.diag-ev-fill.ev-low{background:#9BA8AB;}
+.diag-risk-chip{margin-top:10px;font-size:10px;background:#fef3c7;color:#92400e;padding:4px 8px;border-radius:6px;font-weight:600;}
+.diag-little-box{background:#f8fafc;border-radius:8px;padding:10px;margin-top:10px;font-size:11px;line-height:1.8;color:var(--c3);border:1px solid var(--border);}
+.diag-flow{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;}
+.diag-flow-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--c4);margin-bottom:14px;}
+.diag-flow-row{display:flex;align-items:center;gap:8px;overflow-x:auto;padding-bottom:4px;justify-content:center;}
+.diag-flow-node{display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 12px;border-radius:10px;border:2px solid;min-width:110px;text-align:center;position:relative;flex-shrink:0;}
+.diag-flow-node.fn-arrival{border-color:var(--border);background:var(--surface);}
+.diag-flow-node.fn-bottleneck{border-color:#dc2626;background:#fff5f5;}
+.diag-flow-node.fn-normal{border-color:var(--border);background:var(--surface);}
+.diag-flow-node.fn-mid{border-color:var(--c5);background:var(--surface);}
+.diag-flow-badge{position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:#dc2626;color:#fff;font-size:8px;font-weight:800;padding:2px 8px;border-radius:99px;white-space:nowrap;}
+.diag-flow-icon{font-size:18px;}
+.diag-flow-name{font-size:11px;font-weight:700;color:var(--c1);}
+.diag-flow-metric{font-size:9px;color:var(--c4);}
+.diag-flow-metric.fc-critical{color:#dc2626;font-weight:700;}
+.diag-flow-arrow{font-size:20px;color:var(--c5);flex-shrink:0;}
+.diag-retrabalho-chip{margin-top:3px;font-size:9px;background:#fee2e2;color:#991b1b;padding:2px 6px;border-radius:4px;}
+</style>
+</head>
+<body>
+
+<!-- ==================== NAV ==================== -->
+<nav class="app-nav">
+  <div class="nav-brand">
+    <span class="nav-brand-title">Simulador de Teoria das Filas — Linha de Produtos de Limpeza</span>
+    <span class="v-badge">V11</span>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" id="ntab-dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
+    <button class="nav-tab" id="ntab-simulation" onclick="switchTab('simulation')">⚙️ Simulação</button>
+  </div>
+  <div class="nav-meta">ENGF84 · Grupo 2</div>
+</nav>
+
+<!-- ==================== TAB DASHBOARD ==================== -->
+<div id="tab-dashboard" class="tab-content active">
+<div class="page">
+
+  <!-- Header enterprise -->
+  <div class="ops-header">
+    <div class="ops-brand">
+      <div class="ops-brand-icon">🧴</div>
+      <div>
+        <div class="ops-brand-name">Linha de Produção · Higiene &amp; Limpeza</div>
+        <div class="ops-brand-sub">Unidade Industrial · Monitoramento Operacional</div>
+      </div>
+    </div>
+    <div class="ops-status-bar">
+      <div class="ops-status-item"><span class="ops-status-dot green"></span><span>Sistema Online</span></div>
+      <div class="ops-status-item"><span>📅</span><span id="ops-period-label">01/04/2026 – 25/04/2026</span></div>
+      <div class="ops-status-item"><span>📦</span><span id="ops-records-label">6.916 registros</span></div>
+    </div>
+    <div class="ops-alert-chip danger">
+      <span>⚠</span><span>Gargalo detectado: Montagem</span>
+      <div class="bottleneck-tooltip">
+        <div class="btt-title">🔍 Por que a Montagem é o gargalo?</div>
+        <div class="btt-body">
+          <strong style="color:#fff">Gargalo</strong> é a etapa que trabalha mais perto do seu limite — ela dita o ritmo de toda a linha. Se ela atrasar, tudo para.
+        </div>
+        <div class="btt-evidence">
+          <div class="btt-ev-row">
+            <span class="btt-ev-icon">📊</span>
+            <div class="btt-ev-text">
+              <strong>Maior ocupação da linha: 71,3%</strong><br>
+              <span class="ev-sub">Inspeção: 39,6% · Embalagem: 60,4%</span>
+            </div>
+          </div>
+          <div class="btt-ev-row">
+            <span class="btt-ev-icon">⏳</span>
+            <div class="btt-ev-text">
+              <strong>Fila de espera: 8,44 min</strong><br>
+              <span class="ev-sub">Nas outras etapas a fila é praticamente zero</span>
+            </div>
+          </div>
+          <div class="btt-ev-row">
+            <span class="btt-ev-icon">⚡</span>
+            <div class="btt-ev-text">
+              <strong>Risco de saturação</strong><br>
+              <span class="ev-sub">Se a demanda subir 19%, a ocupação chega a 85% e as filas explodem</span>
+            </div>
+          </div>
+        </div>
+        <hr class="btt-divider"/>
+        <div class="btt-conclusion">Passe o mouse nos cards abaixo para mais detalhes sobre cada evidência.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="dash-filters-bar">
+    <div class="dash-filters-left">
+      <span class="dash-filter-label">Período</span>
+      <div class="dash-filter-group" id="filter-period">
+        <button class="dash-filter-btn active" data-period="all" onclick="setFilter('period','all')">Período completo</button>
+        <button class="dash-filter-btn" data-period="sem1" onclick="setFilter('period','sem1')">Semana 1</button>
+        <button class="dash-filter-btn" data-period="sem2" onclick="setFilter('period','sem2')">Semana 2 ⚠</button>
+        <button class="dash-filter-btn" data-period="sem34" onclick="setFilter('period','sem34')">Semanas 3–4</button>
+      </div>
+    </div>
+    <div class="dash-filters-right">
+      <span class="dash-filter-label">Família</span>
+      <div class="dash-filter-group" id="filter-family">
+        <button class="dash-filter-btn active" data-family="all" onclick="setFilter('family','all')">Todas</button>
+        <button class="dash-filter-btn" data-family="A" onclick="setFilter('family','A')">Família A</button>
+        <button class="dash-filter-btn" data-family="B" onclick="setFilter('family','B')">Família B</button>
+        <button class="dash-filter-btn" data-family="C" onclick="setFilter('family','C')">Família C</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-section">
+    <div class="kpi-section-header">
+      <span class="kpi-section-title">Indicadores Operacionais</span>
+      <span class="kpi-section-subtitle" id="kpi-filter-desc">Período completo · Todas as famílias · 23 dias normais</span>
+    </div>
+    <div class="kpi-grid-v8" id="dash-kpis"></div>
+  </div>
+
+  <!-- Gráficos do dashboard -->
+  <div class="charts-3">
+    <div class="chart-box">
+      <h4>Mix de Produtos (A / B / C)</h4>
+      <div class="chart-wrap"><canvas id="ch-mix"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <h4>Tempo Médio por Etapa (min)</h4>
+      <div class="chart-wrap"><canvas id="ch-times"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <h4>Utilização por Etapa (%)</h4>
+      <div class="chart-wrap"><canvas id="ch-util"></canvas></div>
+    </div>
+  </div>
+
+  <div class="charts-2" style="margin-top:var(--gap)">
+    <div class="chart-box">
+      <h4>Espera Média por Etapa (min)</h4>
+      <div class="chart-wrap"><canvas id="ch-wait"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <h4>Comparativo de Carga — Normal vs Atípico</h4>
+      <div class="chart-wrap"><canvas id="ch-compare-days"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Diagnóstico do gargalo — V8 -->
+  <div class="diag-section">
+    <div class="diag-section-head">
+      <div>
+        <div class="diag-section-title">Análise de Gargalo</div>
+        <div class="diag-section-sub">Por que a <strong>Montagem/Mistura</strong> limita a capacidade total da linha</div>
+      </div>
+      <div class="diag-verdict">
+        <span class="diag-verdict-label">Etapa crítica</span>
+        <span class="diag-verdict-value">⚙️ Montagem</span>
+      </div>
+    </div>
+
+    <!-- 3 cards de evidência -->
+    <div class="diag-evidence-row">
+      <!-- Evidência 1: Utilização -->
+      <div class="diag-evidence-card critical">
+        <div class="diag-evidence-icon">📊</div>
+        <div class="diag-evidence-title">Maior Utilização</div>
+        <div class="diag-evidence-value" id="diag-ev-util">71,3%</div>
+        <div class="diag-evidence-desc">A montagem usa 71,3% da sua capacidade disponível. Quando a estação mais carregada se aproxima de 100%, as filas crescem de forma exponencial.</div>
+        <div class="diag-evidence-bars">
+          <div class="diag-ev-bar-row"><span>Montagem</span><div class="diag-ev-track"><div class="diag-ev-fill ev-critical" id="diag-bar-util-mont" style="width:71.3%">71,3%</div></div></div>
+          <div class="diag-ev-bar-row"><span>Embalagem</span><div class="diag-ev-track"><div class="diag-ev-fill ev-mid" id="diag-bar-util-emb" style="width:60.4%">60,4%</div></div></div>
+          <div class="diag-ev-bar-row"><span>Inspeção</span><div class="diag-ev-track"><div class="diag-ev-fill ev-low" id="diag-bar-util-insp" style="width:39.6%">39,6%</div></div></div>
+        </div>
+      </div>
+
+      <!-- Evidência 2: Fila -->
+      <div class="diag-evidence-card warning">
+        <div class="diag-evidence-icon">⏳</div>
+        <div class="diag-evidence-title">Maior Fila de Espera</div>
+        <div class="diag-evidence-value" id="diag-ev-wait">8,44 min</div>
+        <div class="diag-evidence-desc">Lotes esperam em média 8,44 min para entrar na montagem. Inspeção e embalagem têm fila praticamente nula — quem chega lá encontra servidor livre.</div>
+        <div class="diag-evidence-bars">
+          <div class="diag-ev-bar-row"><span>Montagem</span><div class="diag-ev-track"><div class="diag-ev-fill ev-critical" id="diag-bar-wait-mont" style="width:84%">8,44 min</div></div></div>
+          <div class="diag-ev-bar-row"><span>Embalagem</span><div class="diag-ev-track"><div class="diag-ev-fill ev-low" style="width:6%">0,6</div></div></div>
+          <div class="diag-ev-bar-row"><span>Inspeção</span><div class="diag-ev-track"><div class="diag-ev-fill ev-low" style="width:1%"></div></div></div>
+        </div>
+      </div>
+
+      <!-- Evidência 3: Lei de Little -->
+      <div class="diag-evidence-card info">
+        <div class="diag-evidence-icon">📐</div>
+        <div class="diag-evidence-title">Lei de Little — Validação</div>
+        <div class="diag-evidence-value">L = λ · W</div>
+        <div class="diag-evidence-desc">O WIP calculado pela Lei de Little coincide com o medido, confirmando que o modelo está correto e o gargalo foi identificado com precisão.</div>
+        <div class="diag-little-box">
+          <div>λ = 11,32 lotes/h</div>
+          <div>W = 18,05 min = 0,301 h</div>
+          <div style="border-top:1px solid var(--border);margin-top:4px;padding-top:4px;font-weight:700;color:var(--c1);">L = 11,32 × 0,301 = <strong>3,41 lotes</strong> ✓</div>
+        </div>
+        <div class="diag-risk-chip">⚡ Se λ subir 19% → ρ_mont ≈ 85% (risco de instabilidade)</div>
+      </div>
+    </div>
+
+    <!-- Fluxo visual -->
+    <div class="diag-flow">
+      <div class="diag-flow-title">Fluxo da Linha · Capacidade por Etapa</div>
+      <div class="diag-flow-row">
+
+        <div class="diag-flow-node fn-arrival">
+          <div class="diag-flow-icon">📥</div>
+          <div class="diag-flow-name">Chegada</div>
+          <div class="diag-flow-metric">11,32 lot/h</div>
+        </div>
+
+        <div class="diag-flow-arrow">→</div>
+
+        <div class="diag-flow-node fn-bottleneck">
+          <div class="diag-flow-badge">★ GARGALO</div>
+          <svg viewBox="0 0 80 80" width="72" height="72" style="margin-bottom:2px">
+            <circle cx="40" cy="40" r="33" fill="none" stroke="#fee2e2" stroke-width="8"/>
+            <circle cx="40" cy="40" r="33" fill="none" stroke="#dc2626" stroke-width="8"
+              stroke-dasharray="207.3" stroke-dashoffset="59.5"
+              stroke-linecap="round" transform="rotate(-90 40 40)"/>
+            <text x="40" y="36" text-anchor="middle" font-size="13" font-weight="800" fill="#dc2626">71,3</text>
+            <text x="40" y="48" text-anchor="middle" font-size="9" fill="#9BA8AB">%</text>
+          </svg>
+          <div class="diag-flow-icon">⚙️</div>
+          <div class="diag-flow-name">Montagem</div>
+          <div class="diag-flow-metric fc-critical">ρ=71,3% · Wq=8,44 min</div>
+          <div class="diag-flow-metric">t̄=3,78 min · 1 servidor</div>
+        </div>
+
+        <div class="diag-flow-arrow">→</div>
+
+        <div class="diag-flow-node fn-normal">
+          <svg viewBox="0 0 80 80" width="72" height="72" style="margin-bottom:2px">
+            <circle cx="40" cy="40" r="33" fill="none" stroke="#e0f2fe" stroke-width="8"/>
+            <circle cx="40" cy="40" r="33" fill="none" stroke="#4A5C6A" stroke-width="8"
+              stroke-dasharray="207.3" stroke-dashoffset="125.2"
+              stroke-linecap="round" transform="rotate(-90 40 40)"/>
+            <text x="40" y="36" text-anchor="middle" font-size="13" font-weight="800" fill="#253745">39,6</text>
+            <text x="40" y="48" text-anchor="middle" font-size="9" fill="#9BA8AB">%</text>
+          </svg>
+          <div class="diag-flow-icon">🔍</div>
+          <div class="diag-flow-name">Inspeção</div>
+          <div class="diag-flow-metric">ρ=39,6% · Wq≈0</div>
+          <div class="diag-flow-metric">t̄=2,07 min · 1 servidor</div>
+          <div class="diag-retrabalho-chip">↩ 3% retrabalho → Montagem</div>
+        </div>
+
+        <div class="diag-flow-arrow">→</div>
+
+        <div class="diag-flow-node fn-mid">
+          <svg viewBox="0 0 80 80" width="72" height="72" style="margin-bottom:2px">
+            <circle cx="40" cy="40" r="33" fill="none" stroke="#e8eaeb" stroke-width="8"/>
+            <circle cx="40" cy="40" r="33" fill="none" stroke="#253745" stroke-width="8"
+              stroke-dasharray="207.3" stroke-dashoffset="82.3"
+              stroke-linecap="round" transform="rotate(-90 40 40)"/>
+            <text x="40" y="36" text-anchor="middle" font-size="13" font-weight="800" fill="#253745">60,4</text>
+            <text x="40" y="48" text-anchor="middle" font-size="9" fill="#9BA8AB">%</text>
+          </svg>
+          <div class="diag-flow-icon">📦</div>
+          <div class="diag-flow-name">Embalagem</div>
+          <div class="diag-flow-metric">ρ=60,4% · Wq≈0,6 min</div>
+          <div class="diag-flow-metric">t̄=3,15 min · 1 servidor</div>
+        </div>
+
+        <div class="diag-flow-arrow">→</div>
+
+        <div class="diag-flow-node fn-arrival">
+          <div class="diag-flow-icon">✅</div>
+          <div class="diag-flow-name">Saída</div>
+          <div class="diag-flow-metric">≈271 lot/dia</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /page dashboard -->
+</div><!-- /tab-dashboard -->
+
+<!-- ==================== TAB SIMULATION ==================== -->
+<div id="tab-simulation" class="tab-content">
+<div class="page">
+
+<!-- ============ PAGE HEADER ============ -->
+<div class="sim-page-header">
+  <div>
+    <h2 style="font-size:16px;font-weight:700;color:var(--c1);">⚙️ Simulação da Linha de Produção</h2>
+    <p style="font-size:12px;color:var(--c4);margin-top:2px;">Configure os parâmetros na sidebar esquerda e clique em <strong>Rodar Simulação</strong> para ver os resultados.</p>
+  </div>
+  <button class="btn btn-outline btn-sm" onclick="openSimHelp()">❓ Como funciona esta aba?</button>
+</div>
+
+<div class="sim-layout-v7">
+
+  <!-- ============ SIDEBAR ESQUERDA: PARÂMETROS ============ -->
+  <div class="sim-params-sidebar" id="sim-params-sidebar">
+    <div class="params-sidebar-head">
+      <span style="font-size:14px;font-weight:700;color:var(--c1);">🎛️ Parâmetros</span>
+      <button class="btn btn-ghost btn-sm" onclick="openSimHelp()" title="Como funciona esta aba?">❓</button>
+    </div>
+
+    <!-- Scenario selector tabs -->
+    <div class="params-stab-row" id="stab-row"></div>
+
+    <div style="padding:10px 14px;">
+      <!-- Grupo 1 — Chegada dos Lotes -->
+      <div class="param-group-v5" data-stage="arrival">
+        <div class="param-group-header">
+          <span class="param-group-icon">📦</span>
+          <div>
+            <div class="param-group-title">Chegada dos Lotes</div>
+            <div class="param-group-desc">Taxa de entrada, horizonte e configuração estatística da simulação</div>
+          </div>
+        </div>
+        <div class="param-group-body">
+          <div class="param-field"><label class="param-label">λ (lotes/h)</label><input class="param-input" type="number" id="p-lambda" value="11.32" min="1" max="30" step="0.1" onfocus="highlightStage('arrival')"/></div>
+          <div class="param-field"><label class="param-label">Duração (h)</label><input class="param-input" type="number" id="p-dur" value="24" min="1" max="168" onfocus="highlightStage('arrival')"/></div>
+          <div class="param-field"><label class="param-label">Replicações</label><input class="param-input" type="number" id="p-reps" value="34" min="5" max="200" onfocus="highlightStage('arrival')"/></div>
+          <div class="param-field"><label class="param-label">Semente</label><input class="param-input" type="number" id="p-seed" value="42" min="0" max="999999" onfocus="highlightStage('arrival')"/></div>
+          <div class="param-field"><label class="param-label">Warm-up (h)</label><input class="param-input" type="number" id="p-warmup" value="2" min="0" max="12" step="0.5" onfocus="highlightStage('arrival')"/></div>
+        </div>
+      </div>
+
+      <!-- Grupo 2 — Montagem / Mistura -->
+      <div class="param-group-v5" data-stage="mont">
+        <div class="param-group-header">
+          <span class="param-group-icon">⚙️</span>
+          <div>
+            <div class="param-group-title">Montagem / Mistura</div>
+            <div class="param-group-desc">Gargalo da linha — servidores, tempo de serviço, setup e quebras</div>
+          </div>
+        </div>
+        <div class="param-group-body">
+          <div class="param-field"><label class="param-label">Servidores</label><input class="param-input" type="number" id="p-s-mont" value="1" min="1" max="5" onfocus="highlightStage('mont')"/></div>
+          <div class="param-field"><label class="param-label">Tempo médio (min)</label><input class="param-input" type="number" id="p-t-mont" value="3.78" min="0.5" max="20" step="0.01" onfocus="highlightStage('mont')"/></div>
+          <div class="param-field"><label class="param-label">Setup (min)</label><input class="param-input" type="number" id="p-setup" value="0" min="0" max="60" step="0.5" onfocus="highlightStage('mont')"/></div>
+          <div class="param-field"><label class="param-label">Ativar quebra</label><select class="param-input" id="p-break-on" onfocus="highlightStage('mont')"><option value="0">Não</option><option value="1">Sim</option></select></div>
+          <div class="param-field"><label class="param-label">Horário quebra (h)</label><input class="param-input" type="number" id="p-break-t" value="10" min="0" max="23" step="0.5" onfocus="highlightStage('mont')"/></div>
+          <div class="param-field"><label class="param-label">Duração quebra (h)</label><input class="param-input" type="number" id="p-break-d" value="2" min="0.1" max="12" step="0.1" onfocus="highlightStage('mont')"/></div>
+        </div>
+      </div>
+
+      <!-- Grupo 3 — Inspeção / CQ -->
+      <div class="param-group-v5" data-stage="insp">
+        <div class="param-group-header">
+          <span class="param-group-icon">🔍</span>
+          <div>
+            <div class="param-group-title">Inspeção / CQ</div>
+            <div class="param-group-desc">Controle de qualidade — reprovados retornam à montagem</div>
+          </div>
+        </div>
+        <div class="param-group-body">
+          <div class="param-field"><label class="param-label">Servidores</label><input class="param-input" type="number" id="p-s-insp" value="1" min="1" max="5" onfocus="highlightStage('insp')"/></div>
+          <div class="param-field"><label class="param-label">Tempo médio (min)</label><input class="param-input" type="number" id="p-t-insp" value="2.07" min="0.5" max="15" step="0.01" onfocus="highlightStage('insp')"/></div>
+          <div class="param-field full">
+            <label class="param-label">Reprovação (%)</label>
+            <div class="param-slider-row">
+              <input type="range" id="p-reprova" min="0" max="60" value="3" oninput="document.getElementById('v-reprova').textContent=this.value+'%'" onfocus="highlightStage('insp')"/>
+              <span class="vd" id="v-reprova">3%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grupo 4 — Embalagem / Envase -->
+      <div class="param-group-v5" data-stage="emb">
+        <div class="param-group-header">
+          <span class="param-group-icon">📦</span>
+          <div>
+            <div class="param-group-title">Embalagem / Envase</div>
+            <div class="param-group-desc">Etapa final antes da saída do lote</div>
+          </div>
+        </div>
+        <div class="param-group-body">
+          <div class="param-field"><label class="param-label">Servidores</label><input class="param-input" type="number" id="p-s-emb" value="1" min="1" max="5" onfocus="highlightStage('emb')"/></div>
+          <div class="param-field"><label class="param-label">Tempo médio (min)</label><input class="param-input" type="number" id="p-t-emb" value="3.15" min="0.5" max="20" step="0.01" onfocus="highlightStage('emb')"/></div>
+        </div>
+      </div>
+
+      <!-- Grupo 5 — Mix de Produtos -->
+      <div class="param-group-v5" data-stage="mix">
+        <div class="param-group-header">
+          <span class="param-group-icon">🎨</span>
+          <div>
+            <div class="param-group-title">Mix de Produtos</div>
+            <div class="param-group-desc">Proporção das famílias A / B / C nas chegadas</div>
+          </div>
+        </div>
+        <div class="param-group-body">
+          <div class="param-field full">
+            <label class="param-label">Mix A (%)</label>
+            <div class="param-slider-row">
+              <input type="range" id="p-mixA" min="0" max="100" value="51" oninput="syncMix('A')" onfocus="highlightStage('mix')"/>
+              <span class="vd" id="v-mixA">51%</span>
+            </div>
+          </div>
+          <div class="param-field full">
+            <label class="param-label">Mix B (%)</label>
+            <div class="param-slider-row">
+              <input type="range" id="p-mixB" min="0" max="100" value="29" oninput="syncMix('B')" onfocus="highlightStage('mix')"/>
+              <span class="vd" id="v-mixB">29%</span>
+            </div>
+          </div>
+          <div class="param-field full">
+            <label class="param-label">Mix C (%)</label>
+            <div class="param-slider-row">
+              <input type="range" id="p-mixC" min="0" max="100" value="20" oninput="syncMix('C')" onfocus="highlightStage('mix')"/>
+              <span class="vd" id="v-mixC">20%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grupo 6 — Restrições e Custos -->
+      <div class="param-group-v5" data-stage="costs">
+        <div class="param-group-header">
+          <span class="param-group-icon">💰</span>
+          <div>
+            <div class="param-group-title">Restrições e Custos</div>
+            <div class="param-group-desc">Limite de utilização e custo operacional por etapa</div>
+          </div>
+        </div>
+        <div class="param-group-body">
+          <div class="param-field"><label class="param-label">Util. máx (%)</label><input class="param-input" type="number" id="p-util-max" value="85" min="50" max="100" onfocus="highlightStage('costs')"/></div>
+          <div class="param-field"><label class="param-label">Custo/h Mont R$</label><input class="param-input" type="number" id="p-cost-mont" value="120" min="0" max="9999" step="10" onfocus="highlightStage('costs')"/></div>
+          <div class="param-field"><label class="param-label">Custo/h Insp R$</label><input class="param-input" type="number" id="p-cost-insp" value="80" min="0" max="9999" step="10" onfocus="highlightStage('costs')"/></div>
+          <div class="param-field"><label class="param-label">Custo/h Emb R$</label><input class="param-input" type="number" id="p-cost-emb" value="90" min="0" max="9999" step="10" onfocus="highlightStage('costs')"/></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="params-actions">
+      <button class="btn btn-primary btn-full" onclick="runSimulation()">▶ Rodar Simulação</button>
+      <div class="params-actions-row">
+        <button class="btn btn-outline btn-sm" onclick="pauseAnimation()" id="btn-pause" disabled>⏸</button>
+        <button class="btn btn-outline btn-sm" onclick="resumeAnimation()" id="btn-resume" disabled>▶</button>
+        <button class="btn btn-outline btn-sm" onclick="loadScenario(0)">↺ Reset</button>
+        <button class="btn btn-outline btn-sm" onclick="exportCSV()">⬇ CSV</button>
+        <button class="btn btn-outline btn-sm" onclick="copyExecutiveSummary()">📋</button>
+      </div>
+      <div class="progress-wrap" id="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      <div id="sim-status" style="font-size:11px;color:var(--muted);min-height:16px;padding-top:2px;"></div>
+    </div>
+  </div>
+
+  <!-- ============ ÁREA CENTRAL ============ -->
+  <div class="sim-main">
+
+    <!-- Alerts -->
+    <div id="alerts-sim"></div>
+
+    <!-- Factory visualization -->
+    <div class="section" style="padding:10px;">
+      <div class="section-title" style="margin-bottom:6px;">
+        🏭 Linha de Produção — Visualização em Tempo Real
+        <span style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+          <span id="anim-hour" style="font-size:11px;color:var(--muted);">Hora: —</span>
+          <button class="btn btn-sm btn-outline" id="anim-speed-btn" onclick="cycleSpeed()">🕐 1×</button>
+        </span>
+      </div>
+      <div class="factory-container-v6" id="factory-container-v6">
+        <svg id="factory-svg" viewBox="0 0 960 240" xmlns="http://www.w3.org/2000/svg">
+          <!-- ===== DEFS ===== -->
+          <defs>
+            <linearGradient id="floorGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#11212D"/>
+              <stop offset="1" stop-color="#0a161e"/>
+            </linearGradient>
+            <linearGradient id="liquidGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#38bdf8" stop-opacity="0.55"/>
+              <stop offset="1" stop-color="#1d4ed8" stop-opacity="0.85"/>
+            </linearGradient>
+            <marker id="arr-belt" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M2 2L8 5L2 8" fill="none" stroke="#9BA8AB" stroke-width="1.5"/>
+            </marker>
+            <marker id="arr-ret" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M2 2L8 5L2 8" fill="none" stroke="#dc2626" stroke-width="1.5"/>
+            </marker>
+            <!-- Reusable detergent bottle icon -->
+            <symbol id="detergent-bottle" viewBox="0 0 32 48">
+              <rect x="6" y="18" width="20" height="28" rx="4" fill="#1d4ed8"/>
+              <rect x="6" y="18" width="8" height="28" rx="4" fill="white" opacity="0.08"/>
+              <rect x="11" y="10" width="10" height="10" rx="2" fill="#1e40af"/>
+              <rect x="9" y="5" width="14" height="7" rx="3" fill="#fbbf24"/>
+              <rect x="14" y="0" width="4" height="7" rx="1" fill="#fbbf24"/>
+              <rect x="9" y="24" width="14" height="14" rx="2" fill="white" opacity="0.92"/>
+              <text x="16" y="33" text-anchor="middle" font-size="5" font-weight="800" fill="#1d4ed8">DET</text>
+              <circle class="bubble b1" cx="16" cy="-3" r="1.5" fill="#bfdbfe" opacity="0"/>
+              <circle class="bubble b2" cx="13" cy="-6" r="1" fill="#bfdbfe" opacity="0"/>
+              <circle class="bubble b3" cx="19" cy="-7" r="1.2" fill="#bfdbfe" opacity="0"/>
+            </symbol>
+            <!-- Small static bottle for queue decoration -->
+            <symbol id="mini-bottle" viewBox="0 0 32 48">
+              <rect x="6" y="18" width="20" height="28" rx="4" fill="#1d4ed8"/>
+              <rect x="11" y="10" width="10" height="10" rx="2" fill="#1e40af"/>
+              <rect x="9" y="5" width="14" height="7" rx="3" fill="#fbbf24"/>
+              <rect x="9" y="26" width="14" height="10" rx="2" fill="white" opacity="0.9"/>
+            </symbol>
+          </defs>
+
+          <!-- ===== BACKGROUND ===== -->
+          <rect width="960" height="240" fill="url(#floorGrad)" rx="8"/>
+          <!-- subtle vertical machine-room struts -->
+          <line x1="0" y1="40" x2="960" y2="40" stroke="#253745" stroke-width="1" opacity="0.4"/>
+          <!-- Floor line -->
+          <line x1="0" y1="170" x2="960" y2="170" stroke="#253745" stroke-width="2"/>
+
+          <!-- ===== CONVEYOR BELT (rails + animated belt) ===== -->
+          <line class="belt-rail" x1="100" y1="138" x2="820" y2="138"/>
+          <line class="belt-rail" x1="100" y1="122" x2="820" y2="122"/>
+          <line class="belt-animated" x1="100" y1="130" x2="820" y2="130" marker-end="url(#arr-belt)"/>
+          <!-- belt segment refs (kept for JS compatibility) -->
+          <line id="cv1" x1="100" y1="130" x2="170" y2="130" stroke="transparent" stroke-width="1"/>
+          <line id="cv2" x1="280" y1="130" x2="390" y2="130" stroke="transparent" stroke-width="1"/>
+          <line id="cv3" x1="500" y1="130" x2="610" y2="130" stroke="transparent" stroke-width="1"/>
+          <line id="cv4" x1="720" y1="130" x2="820" y2="130" stroke="transparent" stroke-width="1"/>
+          <line id="cv5" x1="820" y1="130" x2="900" y2="130" stroke="transparent" stroke-width="1"/>
+
+          <!-- ===== CHEGADA (x=10) ===== -->
+          <g id="g-arrival">
+            <rect x="10" y="78" width="86" height="64" rx="6" fill="#253745" stroke="#9BA8AB" stroke-width="1.5"/>
+            <rect x="10" y="78" width="86" height="16" rx="6" fill="#4A5C6A"/>
+            <text x="53" y="115" text-anchor="middle" font-size="24">📥</text>
+            <text x="53" y="90" text-anchor="middle" font-size="9" class="station-label-v6">Chegada</text>
+            <text id="fv-lambda" x="53" y="135" text-anchor="middle" font-size="9" class="station-sub-v6">λ=11,32/h</text>
+            <!-- arriving bottle on belt -->
+            <use href="#mini-bottle" x="58" y="108" width="20" height="30"/>
+          </g>
+
+          <!-- ===== FILA MONTAGEM (waiting zone before x=170) ===== -->
+          <g id="g-qmont">
+            <rect class="queue-zone-v6" x="106" y="146" width="58" height="22" rx="3"/>
+            <use href="#mini-bottle" x="110" y="148" width="13" height="20"/>
+            <use href="#mini-bottle" x="124" y="148" width="13" height="20"/>
+            <use href="#mini-bottle" x="138" y="148" width="13" height="20"/>
+            <text id="fv-qmont" x="156" y="161" text-anchor="middle" font-size="11" font-weight="bold" fill="#fbbf24">0</text>
+          </g>
+
+          <!-- ===== MONTAGEM / MISTURA (x=170, gargalo) ===== -->
+          <g id="g-mont">
+            <!-- machine body -->
+            <rect id="mont-rect" x="170" y="50" width="120" height="100" rx="8" fill="#253745" stroke="#9BA8AB" stroke-width="2"/>
+            <!-- mixing tank -->
+            <rect x="196" y="70" width="68" height="62" rx="6" fill="#0a161e" stroke="#4A5C6A" stroke-width="2"/>
+            <!-- animated liquid inside -->
+            <clipPath id="clip-mont"><rect x="198" y="72" width="64" height="58" rx="5"/></clipPath>
+            <rect id="mont-util-bar" x="198" y="130" width="64" height="0" fill="#253745" opacity="0.8" clip-path="url(#clip-mont)"/>
+            <!-- agitator shaft + blades -->
+            <line x1="248" y1="58" x2="248" y2="110" stroke="#9BA8AB" stroke-width="3"/>
+            <g class="mixer-blade">
+              <rect x="226" y="106" width="44" height="6" rx="3" fill="#9BA8AB"/>
+              <rect x="245" y="92" width="6" height="34" rx="3" fill="#9BA8AB"/>
+            </g>
+            <!-- motor on top -->
+            <rect x="236" y="46" width="24" height="14" rx="3" fill="#4A5C6A" stroke="#9BA8AB" stroke-width="1"/>
+            <text x="230" y="146" text-anchor="middle" font-size="14">⚙️</text>
+            <text id="fv-util-mont" x="270" y="146" text-anchor="middle" font-size="9" class="station-sub-v6">ρ=0%</text>
+            <text x="230" y="64" text-anchor="middle" font-size="9" class="station-label-v6">Mistura</text>
+            <text id="fv-tmontlbl" x="230" y="164" text-anchor="middle" font-size="8" class="station-sub-v6" fill="#9BA8AB">t̄=3,78 min</text>
+            <!-- util side bar -->
+            <rect x="276" y="70" width="8" height="62" rx="3" fill="#0a161e" stroke="#4A5C6A" stroke-width="1"/>
+            <clipPath id="clip-mont-bar"><rect x="276" y="70" width="8" height="62" rx="3"/></clipPath>
+            <rect id="mont-side-bar" x="276" y="132" width="8" height="0" fill="#253745" clip-path="url(#clip-mont-bar)"/>
+            <!-- gargalo badge -->
+            <rect id="garg-badge" x="186" y="36" width="88" height="15" rx="7" fill="#dc2626"/>
+            <text x="230" y="47" text-anchor="middle" font-size="8" fill="white" font-weight="bold">★ GARGALO</text>
+            <!-- alert pulse ring -->
+            <circle id="mont-alert-ring" cx="230" cy="100" r="66" fill="none" stroke="#dc2626" stroke-width="0" opacity="0"/>
+          </g>
+
+          <!-- ===== FILA INSPEÇÃO ===== -->
+          <g id="g-qinsp">
+            <rect class="queue-zone-v6" x="326" y="146" width="58" height="22" rx="3"/>
+            <use href="#mini-bottle" x="330" y="148" width="13" height="20"/>
+            <use href="#mini-bottle" x="344" y="148" width="13" height="20"/>
+            <text id="fv-qinsp" x="372" y="161" text-anchor="middle" font-size="11" font-weight="bold" fill="#fbbf24">0</text>
+          </g>
+
+          <!-- ===== INSPEÇÃO / CQ (x=390) ===== -->
+          <g id="g-insp">
+            <rect x="390" y="60" width="110" height="90" rx="8" fill="#253745" stroke="#9BA8AB" stroke-width="1.5"/>
+            <!-- scanner glass window -->
+            <rect x="408" y="74" width="74" height="62" rx="4" fill="#0a161e" stroke="#4A5C6A" stroke-width="2"/>
+            <rect x="412" y="78" width="66" height="54" rx="3" fill="#11212D" opacity="0.6"/>
+            <!-- util fill -->
+            <clipPath id="clip-insp"><rect x="412" y="78" width="66" height="54" rx="3"/></clipPath>
+            <rect id="insp-util-bar" x="412" y="132" width="66" height="0" fill="#253745" opacity="0.6" clip-path="url(#clip-insp)"/>
+            <!-- bottle under scanner -->
+            <use href="#mini-bottle" x="435" y="98" width="20" height="32"/>
+            <!-- laser beam -->
+            <line class="laser-beam" x1="412" y1="105" x2="478" y2="105"/>
+            <text x="445" y="73" text-anchor="middle" font-size="9" class="station-label-v6">Inspeção/CQ</text>
+            <text id="fv-util-insp" x="445" y="148" text-anchor="middle" font-size="9" class="station-sub-v6">ρ=0%</text>
+            <!-- util side bar -->
+            <rect x="486" y="78" width="8" height="54" rx="3" fill="#0a161e" stroke="#4A5C6A" stroke-width="1"/>
+            <clipPath id="clip-insp-bar"><rect x="486" y="78" width="8" height="54" rx="3"/></clipPath>
+            <rect id="insp-side-bar" x="486" y="132" width="8" height="0" fill="#253745" clip-path="url(#clip-insp-bar)"/>
+          </g>
+
+          <!-- ===== FILA EMBALAGEM ===== -->
+          <g id="g-qemb">
+            <rect class="queue-zone-v6" x="546" y="146" width="58" height="22" rx="3"/>
+            <use href="#mini-bottle" x="550" y="148" width="13" height="20"/>
+            <use href="#mini-bottle" x="564" y="148" width="13" height="20"/>
+            <text id="fv-qemb" x="592" y="161" text-anchor="middle" font-size="11" font-weight="bold" fill="#fbbf24">0</text>
+          </g>
+
+          <!-- ===== EMBALAGEM / ENVASE (x=610) ===== -->
+          <g id="g-emb">
+            <rect x="610" y="60" width="110" height="90" rx="8" fill="#253745" stroke="#9BA8AB" stroke-width="1.5"/>
+            <clipPath id="clip-emb"><rect x="616" y="74" width="98" height="62" rx="4"/></clipPath>
+            <rect id="emb-util-bar" x="616" y="136" width="98" height="0" fill="#253745" opacity="0.5" clip-path="url(#clip-emb)"/>
+            <!-- bottle being capped -->
+            <use href="#detergent-bottle" x="648" y="86" width="32" height="48"/>
+            <!-- mechanical press arm coming down on the cap -->
+            <g class="press-arm">
+              <rect x="652" y="66" width="24" height="10" rx="2" fill="#4A5C6A" stroke="#9BA8AB" stroke-width="1"/>
+              <rect x="661" y="74" width="6" height="10" fill="#9BA8AB"/>
+            </g>
+            <text x="665" y="73" text-anchor="middle" font-size="9" class="station-label-v6">Envase</text>
+            <text id="fv-util-emb" x="665" y="148" text-anchor="middle" font-size="9" class="station-sub-v6">ρ=0%</text>
+            <!-- util side bar -->
+            <rect x="706" y="78" width="8" height="54" rx="3" fill="#0a161e" stroke="#4A5C6A" stroke-width="1"/>
+            <clipPath id="clip-emb-bar"><rect x="706" y="78" width="8" height="54" rx="3"/></clipPath>
+            <rect id="emb-side-bar" x="706" y="132" width="8" height="0" fill="#253745" clip-path="url(#clip-emb-bar)"/>
+          </g>
+
+          <!-- ===== SAÍDA (x=820) ===== -->
+          <g id="g-saida">
+            <rect x="820" y="78" width="96" height="64" rx="6" fill="#253745" stroke="#9BA8AB" stroke-width="1.5"/>
+            <rect x="820" y="78" width="96" height="16" rx="6" fill="#16a34a"/>
+            <text x="868" y="118" text-anchor="middle" font-size="24">✅</text>
+            <text x="868" y="90" text-anchor="middle" font-size="9" class="station-label-v6">Saída</text>
+            <text id="fv-throughput" x="868" y="136" text-anchor="middle" font-size="9" class="station-sub-v6">0 lot/h</text>
+          </g>
+
+          <!-- ===== RETRABALHO arrow (Inspeção -> Mistura) ===== -->
+          <path d="M445 150 Q445 200 230 200 Q170 200 170 152" fill="none" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-ret)"/>
+          <text x="338" y="214" text-anchor="middle" font-size="9" fill="#f87171">← Retrabalho (reprovados retornam à mistura)</text>
+
+          <!-- ===== Lot particles (animated, populated by JS) ===== -->
+          <g id="lot-particles"></g>
+
+          <!-- ===== Breakdown overlay (covers Mistura) ===== -->
+          <g id="breakdown-overlay" visibility="hidden">
+            <rect x="166" y="32" width="128" height="122" rx="8" fill="#dc2626" opacity="0.22"/>
+            <text x="230" y="98" text-anchor="middle" font-size="26">🔧</text>
+            <text x="230" y="120" text-anchor="middle" font-size="11" fill="#fecaca" font-weight="bold">MANUTENÇÃO</text>
+          </g>
+
+          <!-- Idle overlay — shown before first simulation run -->
+          <g id="idle-overlay" visibility="visible">
+            <rect x="0" y="0" width="960" height="240" fill="#06141B" opacity="0.7" rx="8"/>
+            <text x="480" y="105" text-anchor="middle" font-size="18" font-weight="700" fill="#CCD0CF">⚡ Linha de Produção</text>
+            <text x="480" y="130" text-anchor="middle" font-size="13" fill="#9BA8AB">Configure os parâmetros na sidebar esquerda</text>
+            <text x="480" y="150" text-anchor="middle" font-size="13" fill="#9BA8AB">e clique em</text>
+            <rect x="360" y="158" width="240" height="32" rx="8" fill="#11212D" stroke="#4A5C6A" stroke-width="1.5"/>
+            <text x="480" y="179" text-anchor="middle" font-size="13" font-weight="700" fill="#CCD0CF">▶ Rodar Simulação</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- Time bar -->
+      <div class="sim-time-bar" id="sim-time-bar" style="margin-top:8px;display:none;">
+        <span>⏱ Hora: <strong id="sb-hour">0h</strong></span>
+        <span>📋 WIP: <strong id="sb-wip">0</strong></span>
+        <span>✅ Aprovados: <strong id="sb-approved">0</strong></span>
+        <span>🔄 Retrabalho: <strong id="sb-rework">0</strong></span>
+        <span>📈 Throughput: <strong id="sb-tp">0/h</strong></span>
+      </div>
+
+      <!-- Metrics strip -->
+      <div class="metrics-strip" id="metrics-strip"></div>
+    </div>
+
+    <!-- Event Log -->
+    <div class="section" style="padding:10px;">
+      <div class="section-title">
+        📋 Log de Eventos da Simulação
+        <span style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+          <select class="log-filter" id="log-filter" onchange="filterLog()">
+            <option value="all">Todos</option>
+            <option value="danger">Alertas críticos</option>
+            <option value="warn">Avisos</option>
+            <option value="success">Sucessos</option>
+            <option value="info">Info</option>
+            <option value="muted">Sistema</option>
+          </select>
+          <button class="btn btn-sm btn-outline" onclick="clearLog()">🗑 Limpar</button>
+          <button class="btn btn-sm btn-outline" onclick="copyLog()">📋 Copiar</button>
+          <button class="btn btn-sm btn-primary" id="btn-lot-detail" onclick="openLotModal()" disabled title="Execute a simulação para habilitar">🔍 Detalhe por Lote</button>
+        </span>
+      </div>
+      <div class="event-log-wrap" id="event-log">
+        <div class="log-entry"><span class="log-ts">--:--</span><span class="log-badge muted">SISTEMA</span><span class="log-text" style="color:#4A5C6A">Aguardando início da simulação…</span></div>
+      </div>
+    </div>
+
+    <!-- Simulation charts -->
+    <div class="charts-2">
+      <div class="chart-box"><h4>Fila ao Longo do Dia</h4><div class="chart-wrap"><canvas id="sc-queue"></canvas></div></div>
+      <div class="chart-box"><h4>Utilização por Etapa (%)</h4><div class="chart-wrap"><canvas id="sc-util"></canvas></div></div>
+      <div class="chart-box"><h4>WIP e Throughput Acumulado</h4><div class="chart-wrap"><canvas id="sc-throughput"></canvas></div></div>
+      <div class="chart-box"><h4>Comparação de Cenários (throughput)</h4><div class="chart-wrap"><canvas id="sc-compare"></canvas></div></div>
+    </div>
+
+  </div><!-- /sim-main -->
+
+  <!-- ============ SIDEBAR DIREITA: CENÁRIOS ============ -->
+  <div class="sim-scenarios-sidebar">
+    <div class="scen-sidebar-head">
+      <div style="font-size:14px;font-weight:700;color:var(--c1);">⚖️ Comparação de Cenários</div>
+      <p style="font-size:11px;color:var(--c4);margin-top:4px;line-height:1.5;">
+        Cada cenário varia <strong>um fator</strong> da linha de produção. Rode todos para ver qual configuração entrega mais throughput sem violar o limite de utilização.
+      </p>
+    </div>
+
+    <div class="scen-def-list">
+      <div class="scen-def-item">
+        <span class="scen-def-num">0</span>
+        <div>
+          <div class="scen-def-name">Baseline</div>
+          <div class="scen-def-desc">Configuração atual dos dados reais (λ=11,32/h, 1 servidor por etapa)</div>
+        </div>
+      </div>
+      <div class="scen-def-item">
+        <span class="scen-def-num">1</span>
+        <div>
+          <div class="scen-def-name">+Capacidade Montagem</div>
+          <div class="scen-def-desc">Adiciona 1 servidor na montagem (gargalo) → reduz fila e espera</div>
+        </div>
+      </div>
+      <div class="scen-def-item">
+        <span class="scen-def-num">2</span>
+        <div>
+          <div class="scen-def-name">Alta Taxa de Reprovação</div>
+          <div class="scen-def-desc">Eleva reprovação para 15% → aumenta retrabalho e carga na montagem</div>
+        </div>
+      </div>
+      <div class="scen-def-item">
+        <span class="scen-def-num">3</span>
+        <div>
+          <div class="scen-def-name">Menos Retrabalho</div>
+          <div class="scen-def-desc">Reduz reprovação para 1% + setup 5 min → efeito líquido no gargalo</div>
+        </div>
+      </div>
+      <div class="scen-def-item highlight-warn">
+        <span class="scen-def-num">4</span>
+        <div>
+          <div class="scen-def-name">Quebra no Gargalo</div>
+          <div class="scen-def-desc">Simula parada da montagem por 2h às 10h → impacto no throughput diário</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:10px 12px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--bg);">
+      <button class="btn btn-primary btn-full" onclick="compareAll()">▶ Rodar os 5 Cenários e Comparar</button>
+      <p style="font-size:10px;color:var(--c5);margin-top:6px;text-align:center;">Executa 30 replicações de cada cenário (150 simulações no total)</p>
+    </div>
+
+    <div class="sidebar-inner">
+      <div id="sidebar-cards">
+        <div class="sc-pending">Clique em "Rodar os 5 Cenários e Comparar" para ver os resultados</div>
+      </div>
+      <div class="sidebar-actions">
+        <button class="btn btn-sm btn-outline" onclick="exportCSV()">⬇ CSV</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /sim-layout-v7 -->
+</div><!-- /page -->
+</div><!-- /tab-simulation -->
+
+<!-- ==================== LOT DETAIL MODAL ==================== -->
+<div class="modal-overlay" id="lot-modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>🔍 Rastreamento por Lote — 1ª Replicação</h3>
+      <button class="modal-close" onclick="closeLotModal()">✕</button>
+    </div>
+    <div class="modal-toolbar">
+      <input type="text" id="lot-search" placeholder="Buscar lote # ou tipo A/B/C…" oninput="renderLotTable()"/>
+      <select id="lot-filter-type" onchange="renderLotTable()">
+        <option value="">Todos os tipos</option>
+        <option value="A">Tipo A</option>
+        <option value="B">Tipo B</option>
+        <option value="C">Tipo C</option>
+      </select>
+      <select id="lot-filter-status" onchange="renderLotTable()">
+        <option value="">Todos os status</option>
+        <option value="done">Concluído</option>
+        <option value="wip">Em andamento</option>
+        <option value="lost">Não finalizado</option>
+      </select>
+      <select id="lot-filter-rework" onchange="renderLotTable()">
+        <option value="">Qualquer retrabalho</option>
+        <option value="0">Sem retrabalho</option>
+        <option value="1">≥1 retrabalho</option>
+        <option value="2">≥2 retrabalhos</option>
+      </select>
+      <button class="btn btn-sm btn-outline" onclick="exportLotCSV()">⬇ CSV</button>
+    </div>
+    <div class="modal-stats" id="lot-modal-stats"></div>
+    <div class="modal-table-wrap">
+      <table class="lot-table" id="lot-table">
+        <thead>
+          <tr>
+            <th onclick="sortLots('id')">Lote #</th>
+            <th onclick="sortLots('type')">Tipo</th>
+            <th onclick="sortLots('tArr')">Chegada (h)</th>
+            <th onclick="sortLots('wMont')">Espera Fila Mont. (min)</th>
+            <th onclick="sortLots('tSvcMont')">Serv. Mont. (min)</th>
+            <th onclick="sortLots('tSvcInsp')">Serv. Insp. (min)</th>
+            <th onclick="sortLots('tSvcEmb')">Serv. Emb. (min)</th>
+            <th onclick="sortLots('reworks')">Retrabalhos</th>
+            <th onclick="sortLots('leadTime')">Lead Time (min)</th>
+            <th onclick="sortLots('status')">Status</th>
+          </tr>
+        </thead>
+        <tbody id="lot-tbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-foot">
+      <span id="lot-count" style="font-size:11px;color:var(--muted);align-self:center;margin-right:auto;"></span>
+      <button class="btn btn-outline btn-sm" onclick="closeLotModal()">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SIM HELP MODAL ==================== -->
+<div class="help-overlay" id="sim-help-modal">
+  <div class="help-box">
+    <div class="help-head">
+      <h3>❓ Como funciona a aba de Simulação</h3>
+      <button class="help-close" onclick="closeSimHelp()">✕</button>
+    </div>
+    <div class="help-body">
+      <div class="help-section">
+        <h4>🎯 Objetivo</h4>
+        <p>Esta aba executa uma <strong>Simulação de Eventos Discretos (SED)</strong> da linha de produção de produtos de limpeza. Ela estima KPIs como throughput, WIP, lead time e utilização das etapas, com intervalos de confiança calculados a partir de múltiplas replicações. Você ajusta os parâmetros, roda a simulação e observa o comportamento da linha em tempo real.</p>
+      </div>
+      <div class="help-section">
+        <h4>🎛️ Grupos de Parâmetros</h4>
+        <ul>
+          <li><strong>📦 Chegada dos Lotes:</strong> taxa λ, duração, número de replicações, semente e warm-up.</li>
+          <li><strong>⚙️ Montagem / Mistura:</strong> servidores, tempo médio, setup e quebra do gargalo.</li>
+          <li><strong>🔍 Inspeção / CQ:</strong> servidores, tempo médio e taxa de reprovação (gera retrabalho).</li>
+          <li><strong>📦 Embalagem / Envase:</strong> servidores e tempo médio da etapa final.</li>
+          <li><strong>🎨 Mix de Produtos:</strong> proporção das famílias A / B / C — os sliders se balanceiam para somar 100%.</li>
+          <li><strong>💰 Restrições e Custos:</strong> limite de utilização e custo/hora por etapa.</li>
+        </ul>
+        <p style="margin-top:6px;">Ao focar um campo, a etapa correspondente da fábrica é destacada para facilitar a leitura do impacto.</p>
+      </div>
+      <div class="help-section">
+        <h4>▶ Rodar Simulação</h4>
+        <p>O botão <strong>Rodar Simulação</strong> executa as replicações do cenário atual. A barra de progresso indica o andamento; ao terminar, os KPIs, gráficos e a animação da fábrica são atualizados. Valores de utilização acima do limite definido aparecem em vermelho como alerta crítico.</p>
+      </div>
+      <div class="help-section">
+        <h4>⚖️ Comparar Cenários</h4>
+        <p>O botão <strong>Rodar Todos</strong> (no sidebar à direita ou em "Comparar Todos") executa os 5 cenários pré-definidos. Cada card mostra throughput, lead time, WIP e utilização, com a variação percentual em relação ao baseline. O melhor cenário recebe o selo verde; cenários que violam o limite de utilização recebem alerta.</p>
+      </div>
+      <div class="help-section">
+        <h4>📋 Log de Eventos</h4>
+        <p>O log escuro registra os eventos hora a hora: chegadas, conclusões, retrabalho, filas e alertas de utilização. Use o filtro para isolar avisos ou alertas críticos, e os botões para limpar ou copiar o histórico.</p>
+      </div>
+      <div class="help-section">
+        <h4>🔍 Detalhe por Lote</h4>
+        <p>Após rodar a simulação, o botão <strong>Detalhe por Lote</strong> abre uma tabela com o rastreamento individual da 1ª replicação: chegada, espera na fila, tempo de serviço em cada etapa, número de retrabalhos, lead time e status. É possível filtrar, ordenar e exportar em CSV.</p>
+      </div>
+    </div>
+    <div class="help-foot">
+      <button class="btn btn-primary btn-sm" onclick="closeSimHelp()">Entendi</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== FLOATING WIDGET ==================== -->
+<button id="widget-btn" onclick="toggleWidget()">📖 Metodologia</button>
+<div id="widget-panel">
+  <div class="widget-header">
+    <h4>📖 Documentação do Modelo</h4>
+    <button class="widget-close" onclick="toggleWidget()">✕</button>
+  </div>
+  <div class="widget-body" id="widget-body">
+    <div class="widget-msg bot">Olá! Sou o assistente de metodologia. Escolha uma pergunta ou digite abaixo:</div>
+  </div>
+  <div class="widget-questions" id="widget-questions"></div>
+  <div class="widget-input-row">
+    <input class="widget-input" id="widget-input" placeholder="Digite uma pergunta…" onkeydown="if(event.key==='Enter')sendWidgetMsg()"/>
+    <button class="widget-send" onclick="sendWidgetMsg()">→</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script>
+/* ========================================================
+   V5 — MOTOR DE SIMULAÇÃO (preservado da V4/V1)
+   ======================================================== */
+
+// --- Dados empíricos (planilha tratada) ---
+const EMP = {
+  lambda:11.32, tMont:3.78, tInsp:2.07, tEmb:3.15,
+  utilMont:71.3, utilInsp:39.6, utilEmb:60.4,
+  waitMont:8.44, leadTime:18.05, wip:3.41,
+  mixA:51.2, mixB:28.9, mixC:19.8,
+  throughputDay: 271.7,
+  atypLeadTime: 104.9,
+  atypWaitMont: 96.1,
+};
+
+const FILTER_DATA = {
+  'all-all':  {mix:[51.2,28.9,19.8],lambda:11.32,tMont:3.78,tInsp:2.07,tEmb:3.15,utilMont:71.3,utilInsp:39.6,utilEmb:60.4,waitMont:8.44,leadTime:18.05,wip:3.41,throughputDay:271.7,reworkRate:3.0,periodo:'01/04 – 25/04',records:'6.916',dias:'23 dias normais'},
+  'all-A':    {mix:[100,0,0],        lambda:5.80, tMont:3.95,tInsp:2.10,tEmb:3.20,utilMont:68.0,utilInsp:37.2,utilEmb:58.1,waitMont:6.20,leadTime:16.40,wip:2.98,throughputDay:139.1,reworkRate:2.8,periodo:'01/04 – 25/04',records:'3.543',dias:'Família A · 51,2%'},
+  'all-B':    {mix:[0,100,0],        lambda:3.27, tMont:3.65,tInsp:1.98,tEmb:3.05,utilMont:60.2,utilInsp:34.1,utilEmb:53.9,waitMont:3.80,leadTime:14.20,wip:1.77,throughputDay:78.5, reworkRate:3.2,periodo:'01/04 – 25/04',records:'1.999',dias:'Família B · 28,9%'},
+  'all-C':    {mix:[0,0,100],        lambda:2.25, tMont:3.60,tInsp:2.02,tEmb:3.10,utilMont:52.3,utilInsp:30.5,utilEmb:47.8,waitMont:2.10,leadTime:13.10,wip:1.22,throughputDay:54.0, reworkRate:3.5,periodo:'01/04 – 25/04',records:'1.374',dias:'Família C · 19,8%'},
+  'sem1-all': {mix:[51.2,28.9,19.8],lambda:11.10,tMont:3.72,tInsp:2.04,tEmb:3.12,utilMont:69.5,utilInsp:38.1,utilEmb:59.0,waitMont:7.80,leadTime:17.60,wip:3.25,throughputDay:266.4,reworkRate:2.8,periodo:'01/04 – 07/04',records:'1.848',dias:'7 dias normais'},
+  'sem1-A':   {mix:[100,0,0],        lambda:5.70, tMont:3.88,tInsp:2.06,tEmb:3.18,utilMont:66.8,utilInsp:36.5,utilEmb:57.0,waitMont:5.90,leadTime:16.10,wip:2.89,throughputDay:136.7,reworkRate:2.6,periodo:'01/04 – 07/04',records:'945', dias:'Família A'},
+  'sem1-B':   {mix:[0,100,0],        lambda:3.20, tMont:3.61,tInsp:1.95,tEmb:3.02,utilMont:59.1,utilInsp:33.4,utilEmb:52.8,waitMont:3.60,leadTime:13.90,wip:1.71,throughputDay:76.9, reworkRate:3.0,periodo:'01/04 – 07/04',records:'533', dias:'Família B'},
+  'sem1-C':   {mix:[0,0,100],        lambda:2.20, tMont:3.58,tInsp:2.00,tEmb:3.08,utilMont:51.2,utilInsp:29.8,utilEmb:47.1,waitMont:2.00,leadTime:12.90,wip:1.18,throughputDay:52.8, reworkRate:3.3,periodo:'01/04 – 07/04',records:'370', dias:'Família C'},
+  'sem2-all': {mix:[51.2,28.9,19.8],lambda:11.50,tMont:4.10,tInsp:2.15,tEmb:3.30,utilMont:82.8,utilInsp:43.2,utilEmb:65.2,waitMont:42.0,leadTime:57.2,wip:10.9,throughputDay:198.3,reworkRate:4.1,periodo:'08/04 – 14/04',records:'1.967',dias:'5 normais + 2 atípicos ⚠'},
+  'sem2-A':   {mix:[100,0,0],        lambda:5.90, tMont:4.20,tInsp:2.18,tEmb:3.35,utilMont:80.1,utilInsp:41.5,utilEmb:63.1,waitMont:36.0,leadTime:51.0,wip:9.80,throughputDay:101.5,reworkRate:4.0,periodo:'08/04 – 14/04',records:'1.006',dias:'Família A'},
+  'sem2-B':   {mix:[0,100,0],        lambda:3.35, tMont:3.95,tInsp:2.08,tEmb:3.22,utilMont:72.5,utilInsp:38.8,utilEmb:60.0,waitMont:28.0,leadTime:43.2,wip:5.90,throughputDay:57.2, reworkRate:4.3,periodo:'08/04 – 14/04',records:'568', dias:'Família B'},
+  'sem2-C':   {mix:[0,0,100],        lambda:2.30, tMont:3.90,tInsp:2.05,tEmb:3.18,utilMont:65.0,utilInsp:35.5,utilEmb:55.0,waitMont:20.0,leadTime:37.0,wip:4.10,throughputDay:39.6, reworkRate:4.5,periodo:'08/04 – 14/04',records:'393', dias:'Família C'},
+  'sem34-all':{mix:[51.2,28.9,19.8],lambda:11.28,tMont:3.76,tInsp:2.05,tEmb:3.13,utilMont:70.8,utilInsp:39.0,utilEmb:59.8,waitMont:8.10,leadTime:17.80,wip:3.35,throughputDay:270.7,reworkRate:2.9,periodo:'15/04 – 25/04',records:'3.101',dias:'11 dias normais'},
+  'sem34-A':  {mix:[100,0,0],        lambda:5.77, tMont:3.90,tInsp:2.07,tEmb:3.17,utilMont:67.5,utilInsp:36.8,utilEmb:57.5,waitMont:6.10,leadTime:16.20,wip:2.92,throughputDay:138.4,reworkRate:2.7,periodo:'15/04 – 25/04',records:'1.586',dias:'Família A'},
+  'sem34-B':  {mix:[0,100,0],        lambda:3.26, tMont:3.63,tInsp:1.96,tEmb:3.03,utilMont:59.8,utilInsp:33.7,utilEmb:53.2,waitMont:3.70,leadTime:14.00,wip:1.74,throughputDay:78.2, reworkRate:3.1,periodo:'15/04 – 25/04',records:'1.016',dias:'Família B'},
+  'sem34-C':  {mix:[0,0,100],        lambda:2.25, tMont:3.59,tInsp:2.01,tEmb:3.09,utilMont:51.8,utilInsp:30.1,utilEmb:47.5,waitMont:2.05,leadTime:13.00,wip:1.20,throughputDay:54.1, reworkRate:3.4,periodo:'15/04 – 25/04',records:'499', dias:'Família C'},
+};
+
+let dashFilterPeriod='all', dashFilterFamily='all';
+
+function setFilter(type, val){
+  if(type==='period'){
+    dashFilterPeriod=val;
+    document.querySelectorAll('#filter-period .dash-filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.period===val));
+  } else {
+    dashFilterFamily=val;
+    document.querySelectorAll('#filter-family .dash-filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.family===val));
+  }
+  const key=dashFilterPeriod+'-'+dashFilterFamily;
+  const d=FILTER_DATA[key]||FILTER_DATA['all-all'];
+  document.getElementById('ops-period-label').textContent=d.periodo;
+  document.getElementById('ops-records-label').textContent=d.records+' registros';
+  const famLabel=dashFilterFamily==='all'?'Todas as famílias':'Família '+dashFilterFamily;
+  document.getElementById('kpi-filter-desc').textContent=d.periodo+' · '+famLabel+' · '+d.dias;
+  renderDashKPIs(d);
+  renderDashCharts(d);
+  renderDiagnosis(d);
+}
+
+// --- Baseline calibrado para reproduzir ρ≈71,3% ---
+const BASELINE = {
+  lambda:11.32, sMont:1, sInsp:1, sEmb:1,
+  tMont:3.78, tInsp:2.07, tEmb:3.15, setup:0, reprova:3,
+  cvMont:0.31, cvInsp:0.25, cvEmb:0.31,
+  mixA:51, mixB:29, mixC:20, dur:24, reps:34, seed:42, warmup:2,
+  breakOn:0, breakT:10, breakD:2, utilMax:85,
+  costMont:120, costInsp:80, costEmb:90, _name:'Baseline',
+};
+
+const SCENARIOS = {
+  0:{...BASELINE,_name:'Baseline'},
+  1:{...BASELINE,sMont:2,_name:'+Capacidade Montagem'},
+  2:{...BASELINE,setup:0,reprova:15,_name:'Alta Taxa de Reprovação'},
+  3:{...BASELINE,reprova:1,setup:0,_name:'Menos Retrabalho'},
+  4:{...BASELINE,breakOn:1,breakT:10,breakD:2,_name:'Quebra no Gargalo'},
+  5:{...BASELINE,_name:'Personalizado'},
+};
+
+let currentScenario=0, lastResults={}, baselineResults=null;
+
+// --- PRNG seeded (LCG) ---
+function makePRNG(seed){
+  let s=(seed||Math.floor(Math.random()*999999))>>>0;
+  if(!s)s=1;
+  return()=>{s=(1664525*s+1013904223)&0xFFFFFFFF;return(s>>>0)/0x100000000;};
+}
+function expRandom(rng,mean){return -mean*Math.log(Math.max(rng(),1e-12));}
+// Amostra lognormal com média 'mean' e coeficiente de variação 'cv'.
+// cv=1 reproduz a exponencial; cv<1 => menos variável (mais realista aqui).
+function lognormalRandom(rng,mean,cv){
+  if(cv<=0)return mean;
+  const sigma2=Math.log(1+cv*cv);
+  const mu=Math.log(mean)-sigma2/2;
+  const u1=Math.max(rng(),1e-12),u2=rng();
+  const z=Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);
+  return Math.exp(mu+Math.sqrt(sigma2)*z);
+}
+
+// --- Simulação de uma replicação (DES) ---
+function simulateOne(p,seed,trackLots=false){
+  const rng=makePRNG(seed);
+  const DUR=p.dur*60, WARMUP=p.warmup*60;
+  const bkS=p.breakOn?p.breakT*60:Infinity, bkE=p.breakOn?(p.breakT+p.breakD)*60:Infinity;
+  let qMont=[],qInsp=[],qEmb=[];
+  let bMont=0,bInsp=0,bEmb=0;
+  let btMont=0,btInsp=0,btEmb=0;
+  let wipCnt=0,wipInt=0,lastWipT=0;
+  const H=Math.ceil(p.dur);
+  const hQM=new Array(H).fill(0),hQI=new Array(H).fill(0),hQE=new Array(H).fill(0);
+  const hUM=new Array(H).fill(0),hUI=new Array(H).fill(0),hUE=new Array(H).fill(0);
+  const hApp=new Array(H).fill(0),hRew=new Array(H).fill(0),hHits=new Array(H).fill(0);
+  // per-hour arrival/completion counters for grouped log
+  const hArr=new Array(H).fill(0),hDone=new Array(H).fill(0);
+  let approved=0,reworkCnt=0,totArrivals=0,lotId=0,broken=false;
+  let sumLT=0,cntLT=0,sumWM=0,cntWM=0;
+  const EV={ARR:1,EM:2,EI:3,EE:4,BS:5,BE:6,SMP:7};
+  let evs=[];
+  // lot tracking (only when trackLots=true)
+  const lotDB={};
+  function pushEv(t,type,data){evs.push({t,type,data});evs.sort((a,b)=>a.t-b.t);}
+  function wipUpd(t){wipInt+=wipCnt*(t-lastWipT);lastWipT=t;}
+  function gh(t){return Math.min(Math.floor(t/60),H-1);}
+  function pickType(){const r=rng()*100;return r<p.mixA?'A':r<p.mixA+p.mixB?'B':'C';}
+  let lastType=null;
+  function schedArr(after){const t=after+expRandom(rng,60/p.lambda);if(t<DUR)pushEv(t,EV.ARR,{id:++lotId,type:pickType(),sys:t,jMQ:t});}
+  function tryMont(now){
+    while(bMont<p.sMont&&qMont.length>0&&!broken){
+      const lot=qMont.shift();bMont++;
+      const setup=(lastType&&lastType!==lot.type)?p.setup:0;lastType=lot.type;
+      lot.wm=now-lot.jMQ;if(now>=WARMUP){sumWM+=lot.wm;cntWM++;}
+      if(trackLots&&lotDB[lot.id]){
+        lotDB[lot.id].wMont+=lot.wm;
+        lotDB[lot.id].tMontSvcStart=lotDB[lot.id].tMontSvcStart??now;
+      }
+      const svc=lognormalRandom(rng,p.tMont,p.cvMont)+setup,endT=now+svc;
+      if(trackLots&&lotDB[lot.id])lotDB[lot.id]._pendingSvc=svc;
+      if(endT<=DUR)pushEv(endT,EV.EM,{lot});else bMont--;
+    }
+  }
+  function tryInsp(now){
+    while(bInsp<p.sInsp&&qInsp.length>0){
+      const lot=qInsp.shift();bInsp++;
+      const svc=lognormalRandom(rng,p.tInsp,p.cvInsp),endT=now+svc;
+      if(trackLots&&lotDB[lot.id])lotDB[lot.id]._pendingInspSvc=svc;
+      if(endT<=DUR)pushEv(endT,EV.EI,{lot});else bInsp--;
+    }
+  }
+  function tryEmb(now){
+    while(bEmb<p.sEmb&&qEmb.length>0){
+      const lot=qEmb.shift();bEmb++;
+      const svc=lognormalRandom(rng,p.tEmb,p.cvEmb),endT=now+svc;
+      if(trackLots&&lotDB[lot.id])lotDB[lot.id]._pendingEmbSvc=svc;
+      if(endT<=DUR)pushEv(endT,EV.EE,{lot});else bEmb--;
+    }
+  }
+  function sample(t){
+    const h=gh(t);if(t<WARMUP)return;
+    hQM[h]+=qMont.length;hQI[h]+=qInsp.length;hQE[h]+=qEmb.length;
+    hUM[h]+=bMont/p.sMont*100;hUI[h]+=bInsp/p.sInsp*100;hUE[h]+=bEmb/p.sEmb*100;
+    hHits[h]++;
+  }
+  for(let t=30;t<DUR;t+=30)pushEv(t,EV.SMP,{});
+  if(p.breakOn){pushEv(bkS,EV.BS,{});pushEv(bkE,EV.BE,{});}
+  schedArr(0);
+  let pM={t:0,b:0},pI={t:0,b:0},pE={t:0,b:0};
+  while(evs.length>0){
+    const ev=evs.shift(),now=ev.t;
+    btMont+=pM.b*(now-pM.t);btInsp+=pI.b*(now-pI.t);btEmb+=pE.b*(now-pE.t);
+    switch(ev.type){
+      case EV.ARR:{
+        const lot=ev.data;totArrivals++;wipUpd(now);wipCnt++;
+        lot.sys=now;lot.jMQ=now;
+        if(gh(now)<H)hArr[gh(now)]++;
+        if(trackLots)lotDB[lot.id]={id:lot.id,type:lot.type,tArr:now,wMont:0,tMontSvcStart:null,tMontSvcTotal:0,tInspSvcTotal:0,tEmbSvcTotal:0,reworks:0,tDone:null,status:'wip'};
+        qMont.push(lot);tryMont(now);schedArr(now);break;
+      }
+      case EV.EM:{
+        bMont--;wipUpd(now);const l=ev.data.lot;
+        if(trackLots&&lotDB[l.id]){lotDB[l.id].tMontSvcTotal+=(lotDB[l.id]._pendingSvc||0);delete lotDB[l.id]._pendingSvc;}
+        l.jIQ=now;qInsp.push(l);tryMont(now);tryInsp(now);break;
+      }
+      case EV.EI:{
+        bInsp--;wipUpd(now);const l=ev.data.lot;
+        if(trackLots&&lotDB[l.id]){lotDB[l.id].tInspSvcTotal+=(lotDB[l.id]._pendingInspSvc||0);delete lotDB[l.id]._pendingInspSvc;}
+        const fail=rng()*100<p.reprova;
+        if(fail){
+          if(now>=WARMUP)reworkCnt++;
+          if(trackLots&&lotDB[l.id])lotDB[l.id].reworks++;
+          l.jMQ=now;qMont.push(l);tryMont(now);
+          if(now>=WARMUP)hRew[gh(now)]++;
+        } else {
+          l.jEQ=now;qEmb.push(l);tryEmb(now);
+        }
+        tryInsp(now);break;
+      }
+      case EV.EE:{
+        bEmb--;wipUpd(now);wipCnt--;const l=ev.data.lot;
+        if(trackLots&&lotDB[l.id]){lotDB[l.id].tEmbSvcTotal+=(lotDB[l.id]._pendingEmbSvc||0);delete lotDB[l.id]._pendingEmbSvc;lotDB[l.id].tDone=now;lotDB[l.id].status='done';}
+        if(now>=WARMUP){approved++;sumLT+=now-l.sys;cntLT++;hApp[gh(now)]++;if(gh(now)<H)hDone[gh(now)]++;}
+        tryEmb(now);break;
+      }
+      case EV.BS:{broken=true;break;}
+      case EV.BE:{broken=false;tryMont(now);break;}
+      case EV.SMP:{sample(now);break;}
+    }
+    pM={t:now,b:bMont};pI={t:now,b:bInsp};pE={t:now,b:bEmb};
+  }
+  btMont+=pM.b*(DUR-pM.t);btInsp+=pI.b*(DUR-pI.t);btEmb+=pE.b*(DUR-pE.t);
+  wipUpd(DUR);
+  // mark remaining lots as lost/wip
+  if(trackLots)Object.values(lotDB).forEach(l=>{if(l.status==='wip')l.status=l.tArr<WARMUP?'lost':'wip';});
+  const utilMont=(btMont/(p.sMont*DUR))*100;
+  const utilInsp=(btInsp/(p.sInsp*DUR))*100;
+  const utilEmb=(btEmb/(p.sEmb*DUR))*100;
+  const wipMean=wipInt/DUR;
+  const leadTime=cntLT?sumLT/cntLT:0;
+  const waitMont=cntWM?sumWM/cntWM:0;
+  const reworkRate=approved+reworkCnt>0?reworkCnt/(approved+reworkCnt)*100:0;
+  const costDay=(p.costMont*p.sMont+p.costInsp*p.sInsp+p.costEmb*p.sEmb)*p.dur;
+  for(let h=0;h<H;h++){const hits=hHits[h]||1;hQM[h]/=hits;hQI[h]/=hits;hQE[h]/=hits;hUM[h]/=hits;hUI[h]/=hits;hUE[h]/=hits;}
+  return{throughput:approved,wipMean,leadTime,waitMont,utilMont,utilInsp,utilEmb,reworkRate,costDay,
+    approvedRate:100-reworkRate,hourlyQM:hQM,hourlyQI:hQI,hourlyQE:hQE,
+    hourlyUM:hUM,hourlyUI:hUI,hourlyUE:hUE,hourlyApp:hApp,hourlyRew:hRew,hourlyArr:hArr,hourlyDone:hDone,H,
+    lots:trackLots?Object.values(lotDB):null};
+}
+
+function stx(arr){
+  const m=arr.reduce((a,b)=>a+b,0)/arr.length;
+  const s=Math.sqrt(arr.reduce((a,b)=>a+(b-m)**2,0)/(arr.length-1));
+  const me=1.96*s/Math.sqrt(arr.length);
+  return{mean:m,sd:s,se:s/Math.sqrt(arr.length),ci95:me,lo:m-me,hi:m+me};
+}
+
+function runReplications(p){
+  const n=p.reps;
+  const keys=['throughput','wipMean','leadTime','waitMont','utilMont','utilInsp','utilEmb','reworkRate','costDay'];
+  const hkeys=['hourlyQM','hourlyQI','hourlyQE','hourlyUM','hourlyUI','hourlyUE','hourlyApp','hourlyRew','hourlyArr','hourlyDone'];
+  const vals={};keys.forEach(k=>vals[k]=[]);
+  const hall={};hkeys.forEach(k=>hall[k]=null);
+  let firstLots=null;
+  for(let i=0;i<n;i++){
+    const seed=p.seed===0?0:p.seed*1000+i;
+    const r=simulateOne(p,seed,i===0);
+    if(i===0)firstLots=r.lots;
+    keys.forEach(k=>vals[k].push(r[k]));
+    hkeys.forEach(k=>{if(!hall[k])hall[k]=r[k].map(v=>[v]);else r[k].forEach((v,h)=>{if(hall[k][h])hall[k][h].push(v);});});
+  }
+  const res={n,params:p};
+  keys.forEach(k=>res[k]=stx(vals[k]));
+  res.hourly={};hkeys.forEach(k=>{res.hourly[k]=hall[k].map(a=>a.reduce((x,y)=>x+y,0)/a.length);});
+  res.H=hall['hourlyQM'].length;
+  res.lots=firstLots;
+  return res;
+}
+
+/* ========================================================
+   UI MANAGEMENT
+   ======================================================== */
+function switchTab(tab){
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  document.getElementById('ntab-'+tab).classList.add('active');
+}
+
+function toggleParams(){
+  const b=document.getElementById('params-body');
+  if(!b)return;
+  b.classList.toggle('open');
+}
+
+/* ========================================================
+   STAGE HIGHLIGHT (V5)
+   ======================================================== */
+function highlightStage(stage) {
+  // Remove todas as classes de highlight do SVG
+  ['g-arrival','g-mont','g-insp','g-emb','g-saida'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.filter = '';
+  });
+  // Remove highlight de todos os grupos
+  document.querySelectorAll('.param-group-v5').forEach(g => g.classList.remove('stage-active'));
+
+  const stageMap = {
+    'arrival': ['g-arrival'],
+    'mont':    ['g-mont','g-qmont'],
+    'insp':    ['g-insp','g-qinsp'],
+    'emb':     ['g-emb','g-qemb'],
+    'mix':     ['g-arrival'],
+  };
+  const ids = stageMap[stage] || [];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.filter = 'drop-shadow(0 0 6px #253745)';
+  });
+  // Destacar o grupo ativo
+  const activeGroup = document.querySelector(`.param-group-v5[data-stage="${stage}"]`);
+  if (activeGroup) activeGroup.classList.add('stage-active');
+}
+
+/* ========================================================
+   SIM HELP MODAL (V5)
+   ======================================================== */
+function openSimHelp() { document.getElementById('sim-help-modal').classList.add('open'); }
+function closeSimHelp() { document.getElementById('sim-help-modal').classList.remove('open'); }
+document.addEventListener('click',e=>{
+  if(e.target.id==='sim-help-modal') closeSimHelp();
+});
+
+function syncMix(ch){
+  let a=+document.getElementById('p-mixA').value,
+      b=+document.getElementById('p-mixB').value,
+      c=+document.getElementById('p-mixC').value;
+  if(ch==='A'){const r=100-a;b=Math.round(r*b/(b+c||1));c=100-a-b;}
+  else if(ch==='B'){const r=100-b;a=Math.round(r*a/(a+c||1));c=100-a-b;}
+  else{const r=100-c;a=Math.round(r*a/(a+b||1));b=100-a-c;}
+  document.getElementById('p-mixA').value=a;document.getElementById('v-mixA').textContent=a+'%';
+  document.getElementById('p-mixB').value=b;document.getElementById('v-mixB').textContent=b+'%';
+  document.getElementById('p-mixC').value=c;document.getElementById('v-mixC').textContent=c+'%';
+}
+
+function readParams(){
+  return{
+    lambda:+document.getElementById('p-lambda').value,
+    sMont:+document.getElementById('p-s-mont').value,
+    sInsp:+document.getElementById('p-s-insp').value,
+    sEmb:+document.getElementById('p-s-emb').value,
+    tMont:+document.getElementById('p-t-mont').value,
+    tInsp:+document.getElementById('p-t-insp').value,
+    tEmb:+document.getElementById('p-t-emb').value,
+    setup:+document.getElementById('p-setup').value,
+    reprova:+document.getElementById('p-reprova').value,
+    mixA:+document.getElementById('p-mixA').value,
+    mixB:+document.getElementById('p-mixB').value,
+    mixC:+document.getElementById('p-mixC').value,
+    dur:+document.getElementById('p-dur').value,
+    reps:+document.getElementById('p-reps').value,
+    seed:+document.getElementById('p-seed').value,
+    warmup:+document.getElementById('p-warmup').value,
+    breakOn:+document.getElementById('p-break-on').value,
+    breakT:+document.getElementById('p-break-t').value,
+    breakD:+document.getElementById('p-break-d').value,
+    utilMax:+document.getElementById('p-util-max').value,
+    costMont:+document.getElementById('p-cost-mont').value,
+    costInsp:+document.getElementById('p-cost-insp').value,
+    costEmb:+document.getElementById('p-cost-emb').value,
+    _name:SCENARIOS[currentScenario]?._name||'Personalizado',
+  };
+}
+
+function loadScenario(idx){
+  currentScenario=idx;
+  document.querySelectorAll('.stab').forEach(t=>t.classList.remove('active'));
+  document.querySelector(`.stab[data-s="${idx}"]`)?.classList.add('active');
+  const s=SCENARIOS[idx];if(!s)return;
+  const f=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
+  f('p-lambda',s.lambda);f('p-s-mont',s.sMont);f('p-s-insp',s.sInsp);f('p-s-emb',s.sEmb);
+  f('p-t-mont',s.tMont);f('p-t-insp',s.tInsp);f('p-t-emb',s.tEmb);f('p-setup',s.setup);
+  f('p-reprova',s.reprova);document.getElementById('v-reprova').textContent=s.reprova+'%';
+  f('p-mixA',s.mixA);document.getElementById('v-mixA').textContent=s.mixA+'%';
+  f('p-mixB',s.mixB);document.getElementById('v-mixB').textContent=s.mixB+'%';
+  f('p-mixC',s.mixC);document.getElementById('v-mixC').textContent=s.mixC+'%';
+  f('p-dur',s.dur);f('p-reps',s.reps);f('p-seed',s.seed);f('p-warmup',s.warmup);
+  f('p-break-on',s.breakOn);f('p-break-t',s.breakT);f('p-break-d',s.breakD);
+  f('p-util-max',s.utilMax);f('p-cost-mont',s.costMont);f('p-cost-insp',s.costInsp);f('p-cost-emb',s.costEmb);
+}
+
+/* ========================================================
+   SIMULATION RUN
+   ======================================================== */
+async function runSimulation(){
+  const overlay=document.getElementById('idle-overlay');
+  if(overlay)overlay.setAttribute('visibility','hidden');
+  const p=readParams();
+  logEntries=[];
+  logEvent(null,`Simulação iniciada — Cenário: ${p._name} | λ=${p.lambda} lot/h | Montagem s=${p.sMont} t̄=${p.tMont}min | ${p.reps} replicações`,'muted');
+  if(p.breakOn)logEvent(null,`Quebra programada às ${p.breakT}h por ${p.breakD}h na montagem.`,'warn');
+  setStatus('⏳ Simulando '+p.reps+' replicações…',true);
+  await sleep(10);
+  const res=runReplications(p);
+  setStatus('');
+  lastResults[currentScenario]=res;
+  if(currentScenario===0)baselineResults=res;
+  updateSimMetrics(res,p);
+  updateSimCharts(res,p);
+  checkAlerts(res,p);
+  // log hourly grouped summary (only notable hours)
+  for(let h=0;h<res.H;h++){
+    const arr=Math.round(res.hourly.hourlyArr[h]||0);
+    const done=Math.round(res.hourly.hourlyDone[h]||0);
+    const rew=Math.round(res.hourly.hourlyRew[h]||0);
+    const qm=(res.hourly.hourlyQM[h]||0).toFixed(1);
+    const um=(res.hourly.hourlyUM[h]||0).toFixed(1);
+    if(arr>0||done>0||rew>0){
+      const type=um>85?'danger':rew>0?'warn':'info';
+      logEvent(h,`Chegadas: ${arr} | Concluídos: ${done} | Retrabalho: ${rew} | Fila Mont.: ${qm} | Util.Mont.: ${um}%`,type);
+    }
+  }
+  logEvent(null,`Resultado final: Throughput=${res.throughput.mean.toFixed(1)} lot/dia [IC95: ${res.throughput.lo.toFixed(0)}–${res.throughput.hi.toFixed(0)}] | WIP=${res.wipMean.mean.toFixed(2)} | Lead Time=${res.leadTime.mean.toFixed(1)} min | Util.Mont=${res.utilMont.mean.toFixed(1)}%`,'success');
+  // enable lot detail button
+  const btn=document.getElementById('btn-lot-detail');
+  if(btn){btn.disabled=false;btn.title='Ver rastreamento lote a lote (1ª replicação)';}
+  currentLots=res.lots||[];
+  startFactoryAnimation(res,p);
+}
+
+async function compareAll(){
+  setStatus('⏳ Executando 5 cenários…',true);
+  for(let i=0;i<5;i++){
+    await sleep(5);
+    const res=runReplications({...SCENARIOS[i]});
+    lastResults[i]=res;
+    if(i===0)baselineResults=res;
+    setProgress((i+1)/5*100);
+  }
+  setStatus('');
+  renderSidebar();
+  updateCompareChart();
+}
+
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function setStatus(msg,load=false){
+  document.getElementById('sim-status').textContent=msg;
+  const pb=document.getElementById('progress-bar');
+  pb.style.display=load?'block':'none';
+  if(!load)document.getElementById('progress-fill').style.width='0%';
+}
+function setProgress(pct){document.getElementById('progress-fill').style.width=pct+'%';}
+
+/* ========================================================
+   FACTORY ANIMATION
+   ======================================================== */
+let animData=null,animHour=0,animInterval=null,animSpeeds=[1000,500,200],animSpeedIdx=0,animPaused=false;
+
+function cycleSpeed(){
+  animSpeedIdx=(animSpeedIdx+1)%3;
+  const labels=['🕐 1×','🕐 2×','🕐 5×'];
+  document.getElementById('anim-speed-btn').textContent=labels[animSpeedIdx];
+  if(animInterval){clearInterval(animInterval);scheduleAnim();}
+}
+function pauseAnimation(){animPaused=true;clearInterval(animInterval);document.getElementById('btn-pause').disabled=true;document.getElementById('btn-resume').disabled=false;}
+function resumeAnimation(){animPaused=false;scheduleAnim();document.getElementById('btn-pause').disabled=false;document.getElementById('btn-resume').disabled=true;}
+function scheduleAnim(){animInterval=setInterval(animStep,animSpeeds[animSpeedIdx]);}
+
+let _loggedHours=new Set();
+function startFactoryAnimation(res,p){
+  animData=res;animHour=0;animPaused=false;_loggedHours=new Set();
+  clearInterval(animInterval);
+  document.getElementById('sim-time-bar').style.display='flex';
+  document.getElementById('btn-pause').disabled=false;
+  document.getElementById('btn-resume').disabled=true;
+  scheduleAnim();
+}
+
+function animStep(){
+  if(!animData)return;
+  const H=animData.H;
+  drawFactoryHour(animData,animHour);
+  animHour=(animHour+1)%H;
+}
+
+function drawFactoryHour(res,h){
+  const qm=res.hourly.hourlyQM[h]||0;
+  const qi=res.hourly.hourlyQI[h]||0;
+  const qe=res.hourly.hourlyQE[h]||0;
+  const um=res.hourly.hourlyUM[h]||0;
+  const ui=res.hourly.hourlyUI[h]||0;
+  const ue=res.hourly.hourlyUE[h]||0;
+  const app=res.hourly.hourlyApp[h]||0;
+  const rew=res.hourly.hourlyRew[h]||0;
+  const p=res.params;
+
+  // Queue counts
+  document.getElementById('fv-qmont').textContent=qm.toFixed(1);
+  document.getElementById('fv-qinsp').textContent=qi.toFixed(1);
+  document.getElementById('fv-qemb').textContent=qe.toFixed(1);
+
+  // Util text + fill bars (V6 layout)
+  function setUtil(id,barId,val,maxH,yBase,sideBarId,sideMaxH,sideYBase){
+    document.getElementById(id).textContent='ρ='+val.toFixed(1)+'%';
+    const col=val>85?'#dc2626':val>70?'#d97706':'#16a34a';
+    const fill=document.getElementById(barId);
+    if(fill){
+      const fillH=Math.max(0,val/100*maxH);
+      fill.setAttribute('y',yBase-fillH);
+      fill.setAttribute('height',fillH);
+      fill.setAttribute('fill',col);
+    }
+    // vertical side utilization bar next to each machine
+    const sb=sideBarId?document.getElementById(sideBarId):null;
+    if(sb){
+      const sh=Math.max(0,val/100*sideMaxH);
+      sb.setAttribute('y',sideYBase-sh);
+      sb.setAttribute('height',sh);
+      sb.setAttribute('fill',col);
+    }
+  }
+  // Mistura tank liquid: y 72..130 (maxH=58); side bar y 70..132 (maxH=62)
+  setUtil('fv-util-mont','mont-util-bar',um,58,130,'mont-side-bar',62,132);
+  // Inspeção scanner fill: y 78..132 (maxH=54); side bar y 78..132 (maxH=54)
+  setUtil('fv-util-insp','insp-util-bar',ui,54,132,'insp-side-bar',54,132);
+  // Envase fill: y 74..136 (maxH=62); side bar y 78..132 (maxH=54)
+  setUtil('fv-util-emb','emb-util-bar',ue,62,136,'emb-side-bar',54,132);
+
+  // Bottleneck glow on assembly when >85%
+  const mr=document.getElementById('mont-rect');
+  const ring=document.getElementById('mont-alert-ring');
+  if(um>p.utilMax){
+    mr.setAttribute('stroke','#dc2626');mr.setAttribute('stroke-width','3');
+    ring.setAttribute('opacity','0.3');ring.setAttribute('stroke-width','4');
+  } else {
+    mr.setAttribute('stroke','#253745');mr.setAttribute('stroke-width','2');
+    ring.setAttribute('opacity','0');ring.setAttribute('stroke-width','0');
+  }
+
+  // Breakdown overlay
+  const bo=document.getElementById('breakdown-overlay');
+  const isBreak=p.breakOn&&h>=p.breakT&&h<p.breakT+p.breakD;
+  bo.setAttribute('visibility',isBreak?'visible':'hidden');
+
+  // Log events during animation (once per notable hour)
+  if(!_loggedHours.has(h)){
+    _loggedHours.add(h);
+    if(qm>=5) logEvent(h,`Fila de montagem alta: ${qm.toFixed(1)} lotes aguardando.`,'danger');
+    else if(qm>=2) logEvent(h,`Fila de montagem: ${qm.toFixed(1)} lotes em espera.`,'warn');
+    if(um>85) logEvent(h,`Util. montagem crítica: ${um.toFixed(1)}% — sistema próximo da saturação.`,'danger');
+    else if(um>70) logEvent(h,`Util. montagem elevada: ${um.toFixed(1)}%.`,'warn');
+    if(rew>0) logEvent(h,`Retrabalho: ${rew.toFixed(0)} lote(s) reprovado(s) na inspeção e reenviados à montagem.`,'warn');
+    if(isBreak) logEvent(h,`Montagem parada por manutenção (hora ${h}).`,'danger');
+    if(app>0&&h%4===0&&h>0) logEvent(h,`Throughput hora ${h}: ${app.toFixed(1)} lot/h saindo — acumulado: ${res.hourly.hourlyApp.slice(0,h+1).reduce((a,b)=>a+b,0).toFixed(0)} lotes.`,'info');
+  }
+
+  // Throughput in exit box
+  document.getElementById('fv-throughput').textContent=app.toFixed(0)+' lot/h';
+
+  // Time bar
+  document.getElementById('sb-hour').textContent=h+'h';
+  const cumApp=res.hourly.hourlyApp.slice(0,h+1).reduce((a,b)=>a+b,0);
+  const cumRew=res.hourly.hourlyRew.slice(0,h+1).reduce((a,b)=>a+b,0);
+  document.getElementById('sb-wip').textContent=(qm+qi+qe).toFixed(1);
+  document.getElementById('sb-approved').textContent=cumApp.toFixed(0);
+  document.getElementById('sb-rework').textContent=cumRew.toFixed(0);
+  document.getElementById('sb-tp').textContent=app.toFixed(1)+'/h';
+  document.getElementById('anim-hour').textContent='Hora: '+h+'h';
+}
+
+/* ========================================================
+   SIM METRICS & CHARTS
+   ======================================================== */
+function updateSimMetrics(res,p){
+  const base=baselineResults;
+  const strip=document.getElementById('metrics-strip');
+  function dd(key,higher,label,dec,unit){
+    const v=res[key].mean;
+    const d=base&&base[key]?((v-base[key].mean)/Math.abs(base[key].mean)*100):0;
+    const sign=d>=0?'+':'';
+    const cls=v>(p.utilMax||85)&&key.startsWith('util')?'alert':(Math.abs(d)>5?(higher?d>0?'':'warn':d<0?'':'warn'):'');
+    return `<div class="metric-pill ${cls}"><span>${label}</span><strong>${v.toFixed(dec)} ${unit}</strong></div>`;
+  }
+  strip.innerHTML=
+    dd('throughput',true,'Throughput',0,'lot/dia')+
+    dd('wipMean',false,'WIP',1,'lotes')+
+    dd('leadTime',false,'Lead Time',1,'min')+
+    dd('waitMont',false,'Espera Mont.',1,'min')+
+    dd('utilMont',false,'Util.Mont',1,'%')+
+    dd('utilInsp',false,'Util.Insp',1,'%')+
+    dd('utilEmb',false,'Util.Emb',1,'%')+
+    dd('reworkRate',false,'Retrabalho',1,'%');
+}
+
+let simCharts={};
+function updateSimCharts(res,p){
+  const labs=Array.from({length:res.H},(_,i)=>i+'h');
+  function mkChart(id,cfg){
+    if(simCharts[id])simCharts[id].destroy();
+    const ctx=document.getElementById(id).getContext('2d');
+    simCharts[id]=new Chart(ctx,{type:cfg.type||'line',data:{labels:labs,datasets:cfg.datasets},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'top',labels:{font:{size:10},boxWidth:10}}},
+        scales:{x:{ticks:{font:{size:9}}},y:{ticks:{font:{size:9}}}},
+        animation:{duration:300}}});
+  }
+  mkChart('sc-queue',{datasets:[
+    {label:'Fila Mont.',data:res.hourly.hourlyQM,borderColor:'#dc2626',backgroundColor:'rgba(220,38,38,.1)',tension:.3,fill:true},
+    {label:'Fila Insp.',data:res.hourly.hourlyQI,borderColor:'#253745',backgroundColor:'rgba(37,55,69,.1)',tension:.3,fill:true},
+    {label:'Fila Emb.',data:res.hourly.hourlyQE,borderColor:'#d97706',backgroundColor:'rgba(217,119,6,.1)',tension:.3,fill:true},
+  ]});
+  mkChart('sc-util',{datasets:[
+    {label:'Mont.(%)',data:res.hourly.hourlyUM,borderColor:'#dc2626',tension:.3},
+    {label:'Insp.(%)',data:res.hourly.hourlyUI,borderColor:'#253745',tension:.3},
+    {label:'Emb.(%)',data:res.hourly.hourlyUE,borderColor:'#4A5C6A',tension:.3},
+    {label:'Limite '+p.utilMax+'%',data:Array(res.H).fill(p.utilMax),borderColor:'#dc262640',borderDash:[5,3],borderWidth:1.5,pointRadius:0},
+  ]});
+  const cumApp=[],cumRew=[];let ca=0,cr=0;
+  res.hourly.hourlyApp.forEach(v=>{ca+=v;cumApp.push(ca);});
+  res.hourly.hourlyRew.forEach(v=>{cr+=v;cumRew.push(cr);});
+  mkChart('sc-throughput',{datasets:[
+    {label:'Aprovados',data:cumApp,borderColor:'#16a34a',backgroundColor:'rgba(22,163,74,.1)',tension:.3,fill:true},
+    {label:'Retrabalho',data:cumRew,borderColor:'#dc2626',backgroundColor:'rgba(220,38,38,.08)',tension:.3,fill:true},
+  ]});
+}
+
+function updateCompareChart(){
+  const names=['Baseline','+Cap.Mont','Red.Setup','Menos Retrab.','Quebra'];
+  const colors=['#11212D','#253745','#4A5C6A','#9BA8AB','#dc2626'];
+  const vals=[0,1,2,3,4].map(i=>lastResults[i]?lastResults[i].throughput.mean:null);
+  const errs=[0,1,2,3,4].map(i=>lastResults[i]?lastResults[i].throughput.ci95:null);
+  if(simCharts['sc-compare'])simCharts['sc-compare'].destroy();
+  const ctx=document.getElementById('sc-compare').getContext('2d');
+  simCharts['sc-compare']=new Chart(ctx,{type:'bar',
+    data:{labels:names,datasets:[{label:'Throughput (lot/dia)',data:vals,backgroundColor:colors.map(c=>c+'cc'),borderColor:colors,borderWidth:1}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'top',labels:{font:{size:10},boxWidth:10}}},
+      scales:{x:{ticks:{font:{size:9}}},y:{ticks:{font:{size:9}}}}}});
+  // Draw error bars via after-draw plugin
+  Chart.register({id:'errBars',afterDraw(chart){
+    if(!errs.some(Boolean))return;
+    const ctx=chart.ctx;
+    chart.data.datasets.forEach((ds,di)=>{
+      const meta=chart.getDatasetMeta(di);
+      meta.data.forEach((bar,i)=>{
+        const e=errs[i];if(e==null)return;
+        const x=bar.x,yT=chart.scales.y.getPixelForValue(ds.data[i]+e),yB=chart.scales.y.getPixelForValue(ds.data[i]-e);
+        ctx.save();ctx.strokeStyle='#06141B';ctx.lineWidth=1.5;
+        ctx.beginPath();ctx.moveTo(x,yT);ctx.lineTo(x,yB);
+        ctx.moveTo(x-5,yT);ctx.lineTo(x+5,yT);ctx.moveTo(x-5,yB);ctx.lineTo(x+5,yB);
+        ctx.stroke();ctx.restore();
+      });
+    });
+  }});
+}
+
+/* ========================================================
+   ALERTS
+   ======================================================== */
+function checkAlerts(res,p){
+  const box=document.getElementById('alerts-sim');box.innerHTML='';
+  const a=(cls,msg)=>{const d=document.createElement('div');d.className='alert '+cls;d.textContent=msg;box.appendChild(d);};
+  if(res.utilMont.mean>p.utilMax){
+    a('danger','⚠️ Util. montagem ('+res.utilMont.mean.toFixed(1)+'%) excede '+p.utilMax+'% — risco de instabilidade!');
+    logEvent(null,`ALERTA: Util. montagem ${res.utilMont.mean.toFixed(1)}% excede limite ${p.utilMax}% — risco de filas explosivas.`,'danger');
+  } else if(res.utilMont.mean>75){
+    a('warn','⚡ Util. montagem ('+res.utilMont.mean.toFixed(1)+'%) elevada — monitorar crescimento de fila.');
+    logEvent(null,`AVISO: Util. montagem ${res.utilMont.mean.toFixed(1)}% elevada — monitorar crescimento de fila.`,'warn');
+  }
+  if(p.breakOn){
+    a('warn','🔧 Quebra simulada às '+p.breakT+'h por '+p.breakD+'h — throughput reduzido esperado.');
+    logEvent(p.breakT,`Quebra na montagem iniciada — duração ${p.breakD}h. Fila tende a crescer.`,'danger');
+    logEvent(p.breakT+p.breakD,`Montagem restaurada após manutenção. Sistema retoma processamento.`,'warn');
+  }
+  // Little's law validation
+  const lEff=res.throughput.mean/(p.dur-p.warmup);
+  const wipCalc=lEff*(res.leadTime.mean/60);
+  const dev=Math.abs(wipCalc-res.wipMean.mean)/(res.wipMean.mean||1);
+  if(dev<0.3){
+    a('success','✅ Lei de Little validada: L≈λ·W → '+res.wipMean.mean.toFixed(2)+' ≈ '+wipCalc.toFixed(2)+' (desvio '+( dev*100).toFixed(1)+'%)');
+    logEvent(null,`Lei de Little validada: WIP=${res.wipMean.mean.toFixed(2)} ≈ λ·W=${wipCalc.toFixed(2)} (desvio ${(dev*100).toFixed(1)}%).`,'success');
+  }
+}
+
+/* ========================================================
+   SIDEBAR — SCENARIO COMPARISON
+   ======================================================== */
+function renderSidebar(){
+  const cont=document.getElementById('sidebar-cards');
+  cont.innerHTML='';
+  const names=['Baseline','+Cap.Mont.','Red.Setup','Menos Retr.','Quebra'];
+  const base=lastResults[0];
+  // Find best throughput
+  const vals=[0,1,2,3,4].filter(i=>lastResults[i]).map(i=>({i,v:lastResults[i].throughput.mean}));
+  const bestIdx=vals.length?vals.reduce((a,b)=>a.v>b.v?a:b).i:-1;
+
+  for(let i=0;i<5;i++){
+    const res=lastResults[i];if(!res)continue;
+    const isBest=i===bestIdx;
+    const isViol=res.utilMont.mean>res.params.utilMax;
+    const card=document.createElement('div');
+    card.className='scenario-card'+(isBest?' best':'')+(isViol?' violation':'');
+    card.onclick=()=>selectSidebarScenario(i);
+    function pctStr(key,higher){
+      if(!base)return '';
+      const d=(res[key].mean-base[key].mean)/Math.abs(base[key].mean)*100;
+      const cls=higher?(d>0?'up':'dn'):(d<0?'up':'dn');
+      return `<span class="d ${cls}">${d>=0?'+':''}${d.toFixed(1)}%</span>`;
+    }
+    // Calcular delta de throughput vs baseline
+    let deltaHtml='';
+    if(base && i!==0){
+      const delta=res.throughput.mean-base.throughput.mean;
+      const deltaPct=(delta/base.throughput.mean*100);
+      const cls=delta>=0?'up':'dn';
+      const sign=delta>=0?'+':'';
+      deltaHtml=`<div class="sc-delta-row">
+        <span>Throughput vs Baseline</span>
+        <span class="delta-val ${cls}">${sign}${deltaPct.toFixed(1)}% (${sign}${delta.toFixed(0)} lot/dia)</span>
+      </div>`;
+    } else if(i===0){
+      deltaHtml=`<div class="sc-delta-row"><span>Referência base</span><span class="delta-val" style="color:var(--c4)">${res.throughput.mean.toFixed(0)} lot/dia</span></div>`;
+    }
+    card.innerHTML=`
+      <div class="sc-header">
+        <span class="sc-name">${i}. ${names[i]}</span>
+        ${isBest?'<span class="sc-badge best">★ Melhor</span>':''}
+        ${isViol?'<span class="sc-badge bad">⚠️ Risco</span>':''}
+        ${!isBest&&!isViol?'<span class="sc-badge ok">✅ OK</span>':''}
+      </div>
+      <div class="sc-metrics">
+        <div class="sc-metric"><span>Throughput</span><span class="v">${res.throughput.mean.toFixed(0)}</span>${pctStr('throughput',true)}<span style="font-size:9px;color:#9BA8AB">[${res.throughput.lo.toFixed(0)};${res.throughput.hi.toFixed(0)}]</span></div>
+        <div class="sc-metric"><span>Lead Time</span><span class="v">${res.leadTime.mean.toFixed(1)} min</span>${pctStr('leadTime',false)}</div>
+        <div class="sc-metric"><span>WIP</span><span class="v">${res.wipMean.mean.toFixed(1)}</span>${pctStr('wipMean',false)}</div>
+        <div class="sc-metric"><span>Util.Mont.</span><span class="v" style="color:${res.utilMont.mean>85?'#dc2626':'#253745'}">${res.utilMont.mean.toFixed(1)}%</span>${pctStr('utilMont',false)}</div>
+      </div>
+      ${deltaHtml}`;
+    cont.appendChild(card);
+  }
+}
+
+function selectSidebarScenario(idx){
+  if(!lastResults[idx])return;
+  currentScenario=idx;
+  loadScenario(idx);
+  const res=lastResults[idx];
+  updateSimMetrics(res,res.params);
+  updateSimCharts(res,res.params);
+  checkAlerts(res,res.params);
+  startFactoryAnimation(res,res.params);
+  document.querySelectorAll('.scenario-card').forEach((c,i)=>c.classList.toggle('active',i===idx));
+}
+
+/* ========================================================
+   SCENARIO TABS
+   ======================================================== */
+function buildScenarioTabs(){
+  const row=document.getElementById('stab-row');row.innerHTML='';
+  Object.entries(SCENARIOS).forEach(([idx,s])=>{
+    const btn=document.createElement('button');
+    btn.className='stab btn btn-sm btn-outline';btn.dataset.s=idx;
+    btn.textContent=idx+'. '+s._name;
+    if(+idx===currentScenario)btn.classList.add('active');
+    btn.style.cssText='font-size:11px;';
+    btn.onclick=()=>loadScenario(+idx);
+    row.appendChild(btn);
+  });
+}
+
+/* ========================================================
+   DASHBOARD CHARTS
+   ======================================================== */
+let dashCharts={};
+
+function renderDashKPIs(d){
+  const grid=document.getElementById('dash-kpis');
+  const kpis=[
+    {icon:'📥',label:'Taxa de Chegada',   value:d.lambda.toFixed(2),    unit:'lot/h',  sub:'λ — entrada na linha',        trend:null},
+    {icon:'⚙️',label:'Utiliz. Montagem',  value:d.utilMont.toFixed(1),  unit:'%',      sub:'★ Gargalo da linha',           trend:d.utilMont>80?['warn','⚠ Risco de saturação']:d.utilMont>70?['warn','Atenção: >70%']:['neutral','Dentro do limite'], alert:d.utilMont>80},
+    {icon:'🔍',label:'Utiliz. Inspeção',  value:d.utilInsp.toFixed(1),  unit:'%',      sub:'CQ — controle de qualidade',   trend:['neutral','Normal']},
+    {icon:'📦',label:'Utiliz. Embalagem', value:d.utilEmb.toFixed(1),   unit:'%',      sub:'Envase — etapa final',         trend:['neutral','Normal']},
+    {icon:'⏱',label:'Espera Montagem',    value:d.waitMont.toFixed(1),  unit:'min',    sub:'Wq — fila do gargalo',         trend:d.waitMont>20?['down','Espera crítica']:d.waitMont>8?['warn','Elevada']:['up','Normal']},
+    {icon:'🔄',label:'Lead Time Médio',   value:d.leadTime.toFixed(1),  unit:'min',    sub:'Entrada até saída',            trend:d.leadTime>40?['down','Acima do limite']:['up','Normal']},
+    {icon:'📊',label:'WIP Médio',         value:d.wip.toFixed(2),       unit:'lot',    sub:'Lotes em processo simultâneo', trend:['neutral','Lei de Little']},
+    {icon:'✅',label:'Throughput',         value:Math.round(d.throughputDay).toString(),unit:'lot/dia',sub:'Saída diária média',trend:['up','Referência']},
+    {icon:'↩️',label:'Taxa de Retrabalho',value:d.reworkRate.toFixed(1),unit:'%',      sub:'Reprovados na inspeção',       trend:d.reworkRate>4?['down','Acima de 4%']:['up','Dentro do limite']},
+  ];
+  grid.innerHTML=kpis.map(k=>`
+    <div class="kpi-card-v8${k.alert?' alert-card':''}">
+      <div class="kpi-icon-v8">${k.icon}</div>
+      <div class="kpi-label-v8">${k.label}</div>
+      <div><span class="kpi-value-v8">${k.value}</span><span class="kpi-unit-v8">${k.unit}</span></div>
+      <div class="kpi-sub-v8">${k.sub}</div>
+      ${k.trend?`<span class="kpi-trend ${k.trend[0]}">${k.trend[1]}</span>`:''}
+    </div>`).join('');
+}
+
+function renderDashCharts(d){
+  // Escala de eixo limpa: sem grade, sem borda, sem ticks no y
+  const cleanScales={
+    x:{grid:{display:false},border:{display:false},ticks:{font:{size:10,family:"'Inter',sans-serif"},color:'#9BA8AB',padding:4}},
+    y:{display:false}
+  };
+  // Config base para barras com label diretamente na barra
+  function barCfg(label,data,colors,fmt){
+    return {
+      type:'bar',
+      data:{labels:label,datasets:[{data,backgroundColor:colors,borderRadius:8,borderSkipped:false}]},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        layout:{padding:{top:22}},
+        plugins:{
+          legend:{display:false},
+          tooltip:{enabled:true},
+          datalabels:{
+            display:true,
+            anchor:'end',align:'end',offset:2,
+            color:'#253745',font:{size:11,weight:'700',family:"'Inter',sans-serif"},
+            formatter:fmt
+          }
+        },
+        scales:cleanScales
+      }
+    };
+  }
+  function mkDash(id,cfg){
+    if(dashCharts[id])dashCharts[id].destroy();
+    const ctx=document.getElementById(id).getContext('2d');
+    dashCharts[id]=new Chart(ctx,cfg);
+  }
+
+  // Cores das 3 etapas
+  const C_MONT='#dc2626', C_INSP='#4A5C6A', C_EMB='#253745';
+  const stageColors=[C_MONT,C_INSP,C_EMB];
+
+  // 1. Mix — doughnut com labels de percentual dentro
+  const isSingleFam = d.mix.filter(v=>v>0).length===1;
+  const mixLabels = isSingleFam
+    ? [d.mix[0]===100?'Família A':d.mix[1]===100?'Família B':'Família C']
+    : ['Família A','Família B','Família C'];
+  const mixData   = isSingleFam ? [100] : d.mix;
+  const mixColors = isSingleFam
+    ? [d.mix[0]===100?C_MONT:d.mix[1]===100?C_INSP:C_EMB]
+    : [C_MONT,C_INSP,C_EMB];
+  mkDash('ch-mix',{
+    type:'doughnut',
+    data:{labels:mixLabels,datasets:[{data:mixData,backgroundColor:mixColors,borderWidth:0,hoverOffset:6}]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      cutout:'62%',
+      layout:{padding:8},
+      plugins:{
+        legend:{position:'bottom',labels:{font:{size:11,family:"'Inter',sans-serif"},color:'#253745',padding:12,boxWidth:10,boxHeight:10,usePointStyle:true,pointStyle:'circle'}},
+        tooltip:{enabled:true},
+        datalabels:{
+          display:true,
+          color:'#fff',font:{size:12,weight:'800',family:"'Inter',sans-serif"},
+          formatter:(v)=>v>0?v+'%':'',
+          textShadowColor:'rgba(0,0,0,.3)',textShadowBlur:4
+        }
+      }
+    }
+  });
+
+  // 2. Tempo médio por etapa
+  mkDash('ch-times',barCfg(
+    ['Montagem','Inspeção','Embalagem'],
+    [d.tMont,d.tInsp,d.tEmb],
+    stageColors,
+    v=>v.toFixed(1)+' min'
+  ));
+
+  // 3. Utilização por etapa — barra horizontal comunica melhor a saturação
+  if(dashCharts['ch-util'])dashCharts['ch-util'].destroy();
+  dashCharts['ch-util']=new Chart(document.getElementById('ch-util').getContext('2d'),{
+    type:'bar',
+    data:{
+      labels:['Montagem','Inspeção','Embalagem'],
+      datasets:[{
+        data:[d.utilMont,d.utilInsp,d.utilEmb],
+        backgroundColor:stageColors,
+        borderRadius:8,borderSkipped:false
+      }]
+    },
+    options:{
+      indexAxis:'y',
+      responsive:true,maintainAspectRatio:false,
+      layout:{padding:{right:48}},
+      plugins:{
+        legend:{display:false},
+        tooltip:{enabled:true},
+        datalabels:{
+          display:true,
+          anchor:'end',align:'end',offset:4,
+          color:'#253745',font:{size:11,weight:'700',family:"'Inter',sans-serif"},
+          formatter:v=>v.toFixed(1)+'%'
+        }
+      },
+      scales:{
+        x:{display:false,max:110},
+        y:{grid:{display:false},border:{display:false},ticks:{font:{size:10,family:"'Inter',sans-serif"},color:'#9BA8AB'}}
+      }
+    }
+  });
+
+  // 4. Espera em fila
+  const waitEmb=d.waitMont>20?2.1:0.59;
+  mkDash('ch-wait',barCfg(
+    ['Montagem','Inspeção','Embalagem'],
+    [d.waitMont,0,waitEmb],
+    stageColors,
+    v=>v>0?v.toFixed(1)+' min':''
+  ));
+
+  // 5. Comparativo: seleção atual vs referência
+  const base=FILTER_DATA['all-all'];
+  const isSameAsBase=(dashFilterPeriod==='all'&&dashFilterFamily==='all');
+  const compareLabel=isSameAsBase?'Semana 2 (atípico)':'Baseline (período completo)';
+  const compareData=isSameAsBase
+    ?[EMP.atypLeadTime,EMP.atypWaitMont,EMP.throughputDay/10*0.6]
+    :[base.leadTime,base.waitMont,base.throughputDay/10];
+  if(dashCharts['ch-compare-days'])dashCharts['ch-compare-days'].destroy();
+  dashCharts['ch-compare-days']=new Chart(document.getElementById('ch-compare-days').getContext('2d'),{
+    type:'bar',
+    data:{
+      labels:['Lead Time (min)','Espera Montagem (min)','Throughput ÷10'],
+      datasets:[
+        {label:'Seleção atual', data:[d.leadTime,d.waitMont,d.throughputDay/10],  backgroundColor:C_EMB,  borderRadius:8,borderSkipped:false},
+        {label:compareLabel,   data:compareData,                                   backgroundColor:C_MONT, borderRadius:8,borderSkipped:false},
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      layout:{padding:{top:24}},
+      plugins:{
+        legend:{position:'bottom',labels:{font:{size:10,family:"'Inter',sans-serif"},color:'#253745',padding:10,boxWidth:10,boxHeight:10,usePointStyle:true,pointStyle:'circle'}},
+        tooltip:{enabled:true},
+        datalabels:{
+          display:true,
+          anchor:'end',align:'end',offset:2,
+          color:'#253745',font:{size:10,weight:'700',family:"'Inter',sans-serif"},
+          formatter:v=>v.toFixed(1)
+        }
+      },
+      scales:{
+        x:{grid:{display:false},border:{display:false},ticks:{font:{size:9,family:"'Inter',sans-serif"},color:'#9BA8AB'}},
+        y:{display:false}
+      }
+    }
+  });
+}
+
+function renderDiagnosis(d){
+  const ev=document.getElementById('diag-ev-util');
+  if(ev) ev.textContent=d.utilMont.toFixed(1)+'%';
+  const ew=document.getElementById('diag-ev-wait');
+  if(ew) ew.textContent=d.waitMont.toFixed(2)+' min';
+  function setBar(id,pct,label){
+    const el=document.getElementById(id);
+    if(el){el.style.width=Math.min(pct,100)+'%';el.textContent=label;}
+  }
+  setBar('diag-bar-util-mont',d.utilMont,d.utilMont.toFixed(1)+'%');
+  setBar('diag-bar-util-emb', d.utilEmb, d.utilEmb.toFixed(1)+'%');
+  setBar('diag-bar-util-insp',d.utilInsp,d.utilInsp.toFixed(1)+'%');
+  setBar('diag-bar-wait-mont',Math.min(d.waitMont/10*100,100),d.waitMont.toFixed(1)+' min');
+}
+
+function initDashboard(){
+  const d=FILTER_DATA['all-all'];
+  renderDashKPIs(d);
+  renderDashCharts(d);
+  renderDiagnosis(d);
+}
+
+/* ========================================================
+   EXPORT & SUMMARY
+   ======================================================== */
+function exportCSV(){
+  if(!Object.keys(lastResults).length){alert('Execute a simulação primeiro.');return;}
+  const hdr=['Cenario','Throughput_mean','Throughput_lo','Throughput_hi','WIP_mean','WIP_lo','WIP_hi','LeadTime_mean','WaitMont_mean','UtilMont_mean','UtilInsp_mean','UtilEmb_mean','ReworkRate_mean','CostDay','Reps'];
+  const names=['Baseline','+Cap.Montagem','Red.Setup','Menos Retrabalho','Quebra Gargalo'];
+  const rows=[hdr.join(',')];
+  Object.entries(lastResults).forEach(([idx,res])=>{
+    rows.push([names[idx]||'Pers.',res.throughput.mean.toFixed(2),res.throughput.lo.toFixed(2),res.throughput.hi.toFixed(2),
+      res.wipMean.mean.toFixed(3),res.wipMean.lo.toFixed(3),res.wipMean.hi.toFixed(3),
+      res.leadTime.mean.toFixed(2),res.waitMont.mean.toFixed(2),res.utilMont.mean.toFixed(2),
+      res.utilInsp.mean.toFixed(2),res.utilEmb.mean.toFixed(2),res.reworkRate.mean.toFixed(2),
+      res.costDay.mean.toFixed(2),res.n].join(','));
+  });
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));
+  a.download='simulacao_v5_engf84_grupo2.csv';a.click();
+}
+
+function copyExecutiveSummary(){
+  const res=lastResults[currentScenario];
+  if(!res){alert('Execute a simulação primeiro.');return;}
+  const p=res.params;
+  const txt=`RESUMO EXECUTIVO — V5 — Simulador Linha de Produção\nENGF84 · Grupo 2 · ${new Date().toLocaleDateString('pt-BR')}\n${'='.repeat(50)}\nCenário: ${p._name}\nλ=${p.lambda} lot/h · Montagem s=${p.sMont} t̄=${p.tMont}min · Replicações: ${res.n}\n\nRESULTADOS (IC 95%):\n  Throughput : ${res.throughput.mean.toFixed(1)} lot/dia  [${res.throughput.lo.toFixed(1)}; ${res.throughput.hi.toFixed(1)}]\n  WIP Médio  : ${res.wipMean.mean.toFixed(2)} lotes    [${res.wipMean.lo.toFixed(2)}; ${res.wipMean.hi.toFixed(2)}]\n  Lead Time  : ${res.leadTime.mean.toFixed(1)} min     [${res.leadTime.lo.toFixed(1)}; ${res.leadTime.hi.toFixed(1)}]\n  Espera Mont: ${res.waitMont.mean.toFixed(1)} min\n  Util. Mont : ${res.utilMont.mean.toFixed(1)}%\n  Retrabalho : ${res.reworkRate.mean.toFixed(1)}%\n  Custo/dia  : R$ ${res.costDay.mean.toFixed(0)}`.trim();
+  navigator.clipboard.writeText(txt).then(()=>alert('Resumo copiado!'));
+}
+
+/* ========================================================
+   WIDGET DE METODOLOGIA
+   ======================================================== */
+const FAQ={
+  'O que este modelo simula?':'Este modelo simula uma linha de produção de produtos de limpeza com três etapas: montagem/mistura, inspeção/controle de qualidade e embalagem/envase. Usa Simulação de Eventos Discretos (SED) com múltiplas replicações para estimar KPIs como throughput, WIP e lead time.',
+  'Qual é o fluxo da linha de produção?':'Chegada de lotes → Fila → Montagem/Mistura → Inspeção/CQ → (se aprovado) Embalagem → Saída. Se reprovado na inspeção, o lote retorna para retrabalho na fila de montagem.',
+  'Por que a montagem foi considerada o gargalo?':'A montagem/mistura apresenta o maior tempo médio de serviço (3,78 min vs 2,07 min na inspeção e 3,15 min na embalagem), a maior utilização (≈71,3%) e a maior espera em fila (≈8,44 min). Ela limita o fluxo de saída da linha.',
+  'O que é Teoria das Filas?':'Teoria das Filas (Queueing Theory) é a área da pesquisa operacional que estuda o comportamento de sistemas onde há chegada de clientes/lotes e servidores com capacidade limitada. Calcula métricas como fila média, tempo de espera e utilização.',
+  'O que é a Lei de Little?':'L = λ · W. O número médio de itens no sistema (L/WIP) é igual à taxa média de chegada (λ) multiplicada pelo tempo médio no sistema (W/lead time). É usada para validar os resultados da simulação.',
+  'Como o WIP é calculado?':'WIP = integral(lotes no sistema × dt) / duração. É a média ponderada no tempo do número de lotes em processamento ou aguardando. Validado pela Lei de Little: WIP ≈ λ_eff × (lead time em horas).',
+  'Como o throughput é calculado?':'Throughput = número de lotes que completaram a embalagem e saíram do sistema durante o período analisado (pós warm-up). Expresso em lotes por dia.',
+  'Como a utilização é calculada?':'ρ = tempo_ocupado_servidores / (n_servidores × duração_total). Para a montagem: ρ = busyTime / (s_mont × DUR). Um valor >85% indica risco de filas crescentes.',
+  'O que significa utilização acima de 85%?':'Quando a utilização do gargalo ultrapassa 85%, o sistema fica próximo à saturação. Pequenas variações na chegada ou no serviço causam filas explosivas e lead times muito longos. O modelo sinaliza isso com alertas visuais.',
+  'Como o retrabalho foi modelado?':'Uma fração dos lotes (taxa de reprovação, parâmetro configurável) é rejeitada na inspeção e retorna ao fim da fila de montagem. Isso aumenta a carga efetiva sobre o gargalo.',
+  'O que representa a taxa de reprovação?':'É a probabilidade de um lote ser reprovado na inspeção. Modelada como variável de Bernoulli: com p% de chance, o lote volta para retrabalho na montagem.',
+  'O que é o cenário curveball?':'É o Cenário 4 — simula uma quebra da montagem (gargalo) por um período configurável. Representa um dia atípico, onde o equipamento para inesperadamente, causando acúmulo de fila e queda de throughput.',
+  'Como interpretar o intervalo de confiança?':'IC95 = x̄ ± 1,96 · s/√n. Representa o intervalo onde o valor médio real provavelmente está, com 95% de confiança. ICs sobrepostos entre cenários indicam que a diferença pode não ser estatisticamente significativa.',
+  'Por que rodar múltiplas replicações?':'Cada replicação usa uma semente aleatória diferente. Múltiplas replicações reduzem a variabilidade dos resultados e permitem calcular o IC95 com boa precisão. Recomendado: ≥30 replicações.',
+  'Quais são as principais premissas do modelo?':'(1) Fila FIFO em todas as etapas. (2) Retrabalho retorna para montagem. (3) Distribuições exponenciais para chegadas e serviços. (4) Múltiplos servidores homogêneos por etapa. (5) Warm-up de 2h descartado.',
+  'Quais são as limitações do protótipo?':'Distribuição exponencial pode subestimar variabilidade real. Sequenciamento aleatório de famílias (sem otimização). Manutenção modelada como evento binário. Sem modelagem química/laboratorial. Custo operacional é estimativa linear.',
+  'Como comparar os cenários?':'Use o sidebar "Cenários" na aba Simulação. Clique em "Rodar Todos" para executar os 5 cenários com IC95. Compare throughput, WIP, lead time e utilização. O melhor cenário tem maior throughput sem violar ρ>85%.',
+  'Qual cenário parece mais recomendado?':'Em geral, o Cenário 1 (+Capacidade Montagem) reduz a utilização do gargalo e aumenta o throughput, mas tem custo maior. O Cenário 3 (Menos Retrabalho) melhora a eficiência sem adicionar servidores. A escolha depende do trade-off custo-benefício.'
+};
+
+function toggleWidget(){
+  const p=document.getElementById('widget-panel');p.classList.toggle('open');
+}
+function initWidget(){
+  const qc=document.getElementById('widget-questions');
+  Object.keys(FAQ).forEach(q=>{
+    const btn=document.createElement('button');
+    btn.className='widget-q-btn';btn.textContent=q;
+    btn.onclick=()=>answerWidget(q);
+    qc.appendChild(btn);
+  });
+}
+function appendMsg(cls,txt){
+  const body=document.getElementById('widget-body');
+  const div=document.createElement('div');
+  div.className='widget-msg '+cls;div.textContent=txt;
+  body.appendChild(div);
+  body.scrollTop=body.scrollHeight;
+}
+function answerWidget(q){
+  appendMsg('user',q);
+  const ans=FAQ[q]||findFAQ(q)||'Não encontrei uma resposta pré-programada para isso. Consulte a documentação na aba Dashboard ou o documento da Semana 1.';
+  setTimeout(()=>appendMsg('bot',ans),300);
+}
+function findFAQ(q){
+  const ql=q.toLowerCase();
+  for(const [k,v] of Object.entries(FAQ)){if(k.toLowerCase().includes(ql)||ql.includes(k.toLowerCase().split(' ')[2]||''))return v;}
+  return null;
+}
+function sendWidgetMsg(){
+  const inp=document.getElementById('widget-input');const q=inp.value.trim();if(!q)return;
+  inp.value='';answerWidget(q);
+}
+
+/* ========================================================
+   LOT DETAIL MODAL
+   ======================================================== */
+let currentLots=[];
+let lotSortKey='id', lotSortDir=1;
+
+function openLotModal(){
+  document.getElementById('lot-modal').classList.add('open');
+  renderLotTable();
+}
+function closeLotModal(){
+  document.getElementById('lot-modal').classList.remove('open');
+}
+// close on overlay click
+document.addEventListener('click',e=>{
+  if(e.target.id==='lot-modal') closeLotModal();
+});
+
+function minToHM(min){
+  if(min==null||isNaN(min))return '—';
+  const h=Math.floor(min/60), m=min%60;
+  return h>0?`${h}h ${m.toFixed(1)}min`:`${min.toFixed(1)} min`;
+}
+function fmtH(minVal){
+  if(minVal==null)return '—';
+  return (minVal/60).toFixed(2)+'h';
+}
+
+function sortLots(key){
+  const ths=document.querySelectorAll('.lot-table th');
+  ths.forEach(th=>th.className='');
+  if(lotSortKey===key) lotSortDir*=-1; else {lotSortKey=key;lotSortDir=1;}
+  const idx=['id','type','tArr','wMont','tSvcMont','tSvcInsp','tSvcEmb','reworks','leadTime','status'].indexOf(key);
+  if(idx>=0){ths[idx].className=lotSortDir===1?'sort-asc':'sort-desc';}
+  renderLotTable();
+}
+
+function getFilteredLots(){
+  const search=(document.getElementById('lot-search')?.value||'').toLowerCase();
+  const fType=document.getElementById('lot-filter-type')?.value||'';
+  const fStatus=document.getElementById('lot-filter-status')?.value||'';
+  const fRework=document.getElementById('lot-filter-rework')?.value||'';
+  return currentLots
+    .map(l=>({
+      ...l,
+      leadTime: l.tDone!=null ? l.tDone - l.tArr : null,
+      tSvcMont: l.tMontSvcTotal,
+      tSvcInsp: l.tInspSvcTotal,
+      tSvcEmb:  l.tEmbSvcTotal,
+    }))
+    .filter(l=>{
+      if(fType && l.type!==fType) return false;
+      if(fStatus && l.status!==fStatus) return false;
+      if(fRework==='0' && l.reworks!==0) return false;
+      if(fRework==='1' && l.reworks<1) return false;
+      if(fRework==='2' && l.reworks<2) return false;
+      if(search && !String(l.id).includes(search) && !l.type.toLowerCase().includes(search)) return false;
+      return true;
+    })
+    .sort((a,b)=>{
+      let va=a[lotSortKey]??-Infinity, vb=b[lotSortKey]??-Infinity;
+      if(typeof va==='string') return lotSortDir*(va.localeCompare(vb));
+      return lotSortDir*(va-vb);
+    });
+}
+
+function renderLotTable(){
+  if(!currentLots.length) return;
+  const lots=getFilteredLots();
+  // summary stats
+  const done=lots.filter(l=>l.status==='done');
+  const withRework=lots.filter(l=>l.reworks>0);
+  const avgLT=done.length?done.reduce((a,l)=>a+(l.leadTime||0),0)/done.length:0;
+  const avgW=done.length?done.reduce((a,l)=>a+(l.wMont||0),0)/done.length:0;
+  document.getElementById('lot-modal-stats').innerHTML=`
+    <span class="mstat">Lotes exibidos: <strong>${lots.length}</strong></span>
+    <span class="mstat">Concluídos: <strong>${done.length}</strong></span>
+    <span class="mstat">Em andamento/perdidos: <strong>${lots.length-done.length}</strong></span>
+    <span class="mstat">Com retrabalho: <strong>${withRework.length}</strong> (${lots.length?((withRework.length/lots.length)*100).toFixed(1):0}%)</span>
+    <span class="mstat">Lead Time médio: <strong>${avgLT.toFixed(1)} min</strong></span>
+    <span class="mstat">Espera Mont. média: <strong>${avgW.toFixed(1)} min</strong></span>
+  `;
+  document.getElementById('lot-count').textContent=`${lots.length} lotes exibidos de ${currentLots.length} total`;
+  const tbody=document.getElementById('lot-tbody');
+  tbody.innerHTML=lots.slice(0,2000).map(l=>{
+    const lt=l.leadTime;
+    const rowCls=l.reworks>0?'row-rework':l.status==='wip'?'row-wip':l.status==='lost'?'row-lost':'';
+    const statusBadge=l.status==='done'
+      ?`<span class="badge-status-done">✅ Concluído</span>`
+      :l.status==='wip'
+      ?`<span class="badge-status-wip">⏳ Em andamento</span>`
+      :`<span class="badge-status-lost">❌ Não finalizado</span>`;
+    const rewCell=l.reworks>0
+      ?`<span style="color:#dc2626;font-weight:700">${l.reworks}×</span>`
+      :`<span style="color:#9BA8AB">0</span>`;
+    return `<tr class="${rowCls}">
+      <td><strong>#${l.id}</strong></td>
+      <td><span class="badge-type badge-${l.type}">${l.type}</span></td>
+      <td>${fmtH(l.tArr)}</td>
+      <td>${l.wMont>0?l.wMont.toFixed(1)+' min':'—'}</td>
+      <td>${l.tSvcMont>0?l.tSvcMont.toFixed(1)+' min':'—'}</td>
+      <td>${l.tSvcInsp>0?l.tSvcInsp.toFixed(1)+' min':'—'}</td>
+      <td>${l.tSvcEmb>0?l.tSvcEmb.toFixed(1)+' min':'—'}</td>
+      <td>${rewCell}</td>
+      <td>${lt!=null?lt.toFixed(1)+' min':'—'}</td>
+      <td>${statusBadge}</td>
+    </tr>`;
+  }).join('');
+}
+
+function exportLotCSV(){
+  const lots=getFilteredLots();
+  const hdr='ID,Tipo,Chegada(h),EsperaFilaMont(min),ServicoMont(min),ServicoInsp(min),ServicoEmb(min),Retrabalhos,LeadTime(min),Status';
+  const rows=lots.map(l=>[l.id,l.type,(l.tArr/60).toFixed(3),(l.wMont||0).toFixed(2),(l.tSvcMont||0).toFixed(2),(l.tSvcInsp||0).toFixed(2),(l.tSvcEmb||0).toFixed(2),l.reworks,(l.leadTime!=null?l.leadTime.toFixed(2):''),l.status].join(','));
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([[hdr,...rows].join('\n')],{type:'text/csv'}));
+  a.download='lotes_v5_engf84_grupo2.csv';a.click();
+}
+
+/* ========================================================
+   EVENT LOG
+   ======================================================== */
+let logEntries=[];
+let logFilterVal='all';
+
+function logEvent(hour,text,type='info'){
+  const ts=hour!=null?`${String(hour).padStart(2,'0')}:00`:'--:--';
+  logEntries.unshift({ts,text,type});
+  renderLog();
+}
+
+function renderLog(){
+  const box=document.getElementById('event-log');
+  if(!box)return;
+  const filtered=logFilterVal==='all'?logEntries:logEntries.filter(e=>e.type===logFilterVal);
+  if(!filtered.length){
+    box.innerHTML='<div class="log-entry"><span class="log-ts">--:--</span><span class="log-badge muted">SISTEMA</span><span class="log-text" style="color:#4A5C6A">Nenhum evento para o filtro selecionado.</span></div>';
+    return;
+  }
+  const labels={info:'INFO',warn:'AVISO',danger:'ALERTA',success:'OK',muted:'SISTEMA'};
+  box.innerHTML=filtered.map(e=>`
+    <div class="log-entry" data-type="${e.type}">
+      <span class="log-ts">${e.ts}</span>
+      <span class="log-badge ${e.type}">${labels[e.type]||'INFO'}</span>
+      <span class="log-text">${e.text}</span>
+    </div>`).join('');
+}
+
+function filterLog(){
+  logFilterVal=document.getElementById('log-filter').value;
+  renderLog();
+}
+
+function clearLog(){
+  logEntries=[];
+  renderLog();
+  logEvent(null,'Log limpo pelo usuário.','muted');
+}
+
+function copyLog(){
+  const txt=logEntries.map(e=>`[${e.ts}] ${e.text}`).join('\n');
+  navigator.clipboard.writeText(txt).then(()=>alert('Log copiado!'));
+}
+
+/* ========================================================
+   INIT
+   ======================================================== */
+let speedIdx=0;
+window.addEventListener('DOMContentLoaded',()=>{
+  if(typeof ChartDataLabels!=='undefined'){
+    Chart.register(ChartDataLabels);
+    // Desativa globalmente; cada gráfico do dashboard ativa explicitamente
+    Chart.defaults.set('plugins.datalabels',{display:false});
+  }
+  initDashboard();
+  buildScenarioTabs();
+  initWidget();
+  showIdleState();
+});
+
+function showIdleState() {
+  // Mostrar overlay de idle no SVG
+  const overlay = document.getElementById('idle-overlay');
+  if (overlay) overlay.setAttribute('visibility', 'visible');
+  // Esconder time bar
+  document.getElementById('sim-time-bar').style.display = 'none';
+  // Desabilitar pause/resume
+  document.getElementById('btn-pause').disabled = true;
+  document.getElementById('btn-resume').disabled = true;
+  // Deixar charts vazios com placeholder visual
+  ['sc-queue','sc-util','sc-throughput','sc-compare'].forEach(id => {
+    const ctx = document.getElementById(id)?.getContext('2d');
+    if (!ctx) return;
+    if (simCharts[id]) simCharts[id].destroy();
+    simCharts[id] = new Chart(ctx, {
+      type: 'line',
+      data: { labels: [], datasets: [] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: 'Execute a simulação para ver os resultados', color: '#9BA8AB', font: { size: 11 } }
+        }
+      }
+    });
+  });
+}
+</script>
+</body>
+</html>
